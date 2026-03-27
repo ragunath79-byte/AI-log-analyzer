@@ -1,7 +1,6 @@
 # 🔍 AI Log Analyzer — Demo Guide
 
-> **Purpose:** End-to-end technical explanation for demonstrating the AI Log Analyzer project  
-> **Audience:** Non-dev background presenters  
+> **Purpose:** End-to-end technical explanation for demonstrating the AI Log Analyzer project   
 > **Last Updated:** March 2026
 
 ---
