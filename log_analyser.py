@@ -13740,16 +13740,17 @@ def print_analysis(matches, logs):
 
     print(f"\n  {color('━' * 60, DIM)}\n")
 
-# ─── Optional: OpenAI-powered deep analysis ──────────────────────────────────
-def analyze_with_openai(logs):
-    """Use OpenAI GPT for deeper analysis if OPENAI_API_KEY is set."""
+# ─── Optional: AI-powered deep analysis (Claude or OpenAI) ──────────────────
+def analyze_with_claude(logs):
+    """Use Claude (Anthropic) for deeper analysis if ANTHROPIC_API_KEY is set."""
     try:
-        from openai import OpenAI
-        api_key = os.environ.get("OPENAI_API_KEY")
+        import urllib.request
+        import json
+        
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             return None
 
-        client = OpenAI(api_key=api_key)
         prompt = f"""You are a senior SRE engineer helping a developer understand an error log.
 
 Analyze the following logs and provide (in plain, simple language):
@@ -13760,16 +13761,92 @@ Analyze the following logs and provide (in plain, simple language):
 5. **Severity** — Low / Medium / High
 
 Logs:
-{logs}
+{logs[:8000]}
 """
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
+        
+        data = json.dumps({
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 1500,
+            "messages": [{"role": "user", "content": prompt}]
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01"
+            }
         )
-        return response.choices[0].message.content
-    except Exception:
+        
+        with urllib.request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result["content"][0]["text"]
+    except Exception as e:
         return None
+
+
+def analyze_with_openai(logs):
+    """Use OpenAI GPT for deeper analysis if OPENAI_API_KEY is set."""
+    try:
+        import urllib.request
+        import json
+        
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return None
+
+        prompt = f"""You are a senior SRE engineer helping a developer understand an error log.
+
+Analyze the following logs and provide (in plain, simple language):
+1. **Error Summary** — one-line plain English summary
+2. **Root Cause** — simple explanation anyone can understand
+3. **Impact** — what breaks because of this?
+4. **Fix Steps** — numbered, copy-paste-ready commands where possible
+5. **Severity** — Low / Medium / High
+
+Logs:
+{logs[:8000]}
+"""
+        
+        data = json.dumps({
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+        )
+        
+        with urllib.request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        return None
+
+
+def analyze_with_ai(logs):
+    """Try Claude first, then OpenAI as fallback."""
+    # Try Claude first
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        result = analyze_with_claude(logs)
+        if result:
+            return ("Claude", result)
+    
+    # Fallback to OpenAI
+    if os.environ.get("OPENAI_API_KEY"):
+        result = analyze_with_openai(logs)
+        if result:
+            return ("ChatGPT", result)
+    
+    return None
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def run_analysis(logs):
@@ -13777,16 +13854,31 @@ def run_analysis(logs):
     matches = analyze_offline(logs)
     print_analysis(matches, logs)
 
-    # Optional: OpenAI deep analysis (if key is set)
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if api_key:
-        print(color("  🤖 Running AI deep analysis...\n", DIM))
-        ai_result = analyze_with_openai(logs)
+    # If no patterns matched, try AI analysis
+    has_api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    
+    if not matches and has_api_key:
+        print(color("  🤖 No patterns matched. Consulting AI...\n", CYAN))
+        ai_result = analyze_with_ai(logs)
         if ai_result:
-            section("🤖", "AI Deep Analysis", ai_result)
+            ai_name, ai_response = ai_result
+            section("🤖", f"AI Analysis ({ai_name})", ai_response)
             print()
-    else:
-        print(color("  💡 Tip: export OPENAI_API_KEY='...' for AI-powered deep analysis.\n", DIM))
+        else:
+            print(color("  ⚠️  AI analysis failed. Check your API key.\n", YELLOW))
+    elif matches and has_api_key:
+        # Optionally run AI for additional insights
+        print(color("  🤖 Running AI deep analysis for additional insights...\n", DIM))
+        ai_result = analyze_with_ai(logs)
+        if ai_result:
+            ai_name, ai_response = ai_result
+            section("🤖", f"AI Deep Analysis ({ai_name})", ai_response)
+            print()
+    elif not matches:
+        print(color("  💡 Tip: Set ANTHROPIC_API_KEY or OPENAI_API_KEY for AI-powered analysis when no patterns match.\n", DIM))
+        print(color("     export ANTHROPIC_API_KEY='sk-ant-...'", DIM))
+        print(color("     export OPENAI_API_KEY='sk-...'", DIM))
+        print()
 
 
 def main():

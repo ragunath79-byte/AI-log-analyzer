@@ -20,7 +20,7 @@ from urllib.parse import parse_qs
 
 # ─── Import patterns from log_analyser.py ────────────────────────────────────
 try:
-    from log_analyser import PATTERNS, analyze_offline
+    from log_analyser import PATTERNS, analyze_offline, analyze_with_ai
 except ImportError:
     print("❌ Error: log_analyser.py must be in the same directory.")
     print("   Make sure log_analyser.py exists at:", os.path.dirname(os.path.abspath(__file__)))
@@ -564,8 +564,26 @@ async function analyze() {
 function renderResults(data) {
   const el = document.getElementById('results');
   
+  // If AI analysis is available (when no patterns matched)
+  if (data.ai_analysis) {
+    el.innerHTML = `
+      <div class="summary-bar" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%); border-color: var(--accent-glow);">
+        <div class="icon" style="background: var(--accent);">🤖</div>
+        <div>
+          <div class="count" style="color: var(--accent-light);">AI Analysis (${escapeHtml(data.ai_provider)})</div>
+          <div class="label">No built-in patterns matched — analyzed with AI</div>
+        </div>
+      </div>
+      <div class="issue-card">
+        <div class="field">
+          <div class="field-value" style="white-space: pre-wrap; line-height: 1.8;">${escapeHtml(data.ai_analysis)}</div>
+        </div>
+      </div>`;
+    return;
+  }
+  
   if (!data.matches || data.matches.length === 0) {
-    el.innerHTML = '<div class="no-match">⚠️ No known error patterns matched. Try pasting a more complete log.</div>';
+    el.innerHTML = '<div class="no-match">⚠️ No known error patterns matched.<br><br>💡 <strong>Tip:</strong> Set <code>ANTHROPIC_API_KEY</code> or <code>OPENAI_API_KEY</code> environment variable to enable AI-powered analysis for unknown errors.</div>';
     return;
   }
   
@@ -723,8 +741,18 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
                     "fix": m["fix"],
                 }
                 for m in matches
-            ]
+            ],
+            "ai_analysis": None,
+            "ai_provider": None
         }
+
+        # If no pattern matches, try AI analysis
+        if not matches:
+            ai_result = analyze_with_ai(logs)
+            if ai_result:
+                ai_name, ai_response = ai_result
+                result["ai_analysis"] = ai_response
+                result["ai_provider"] = ai_name
 
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
