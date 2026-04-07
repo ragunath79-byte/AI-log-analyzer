@@ -20,7 +20,11 @@ from urllib.parse import parse_qs
 
 # ─── Import patterns from log_analyser.py ────────────────────────────────────
 try:
-    from log_analyser import PATTERNS, analyze_offline, analyze_with_ai
+    from log_analyser import (
+        PATTERNS, analyze_offline, analyze_with_ai,
+        log_unmatched_error, get_unmatched_errors, update_unmatched_error,
+        clear_unmatched_errors, get_feedback_stats, suggest_pattern_from_log
+    )
 except ImportError:
     print("❌ Error: log_analyser.py must be in the same directory.")
     print("   Make sure log_analyser.py exists at:", os.path.dirname(os.path.abspath(__file__)))
@@ -584,6 +588,155 @@ HTML_PAGE = """<!DOCTYPE html>
   .no-match-card .btn-primary {
     display: inline-flex;
   }
+  
+  /* Feedback Queue Panel */
+  .feedback-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: 0.5rem;
+  }
+  .feedback-btn:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+  .feedback-badge {
+    background: var(--red);
+    color: white;
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 10px;
+    margin-left: 0.3rem;
+  }
+  .feedback-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    animation: slideUp 0.3s ease;
+  }
+  .feedback-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .feedback-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: var(--bg-primary);
+    border-radius: 12px;
+  }
+  .stat-item {
+    text-align: center;
+    flex: 1;
+  }
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--accent-light);
+  }
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .feedback-list {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .feedback-item {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .feedback-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+  }
+  .feedback-item-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .feedback-count {
+    background: var(--red-glow);
+    color: var(--red);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .feedback-time {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+  .feedback-snippet {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 0.5rem;
+    border-radius: 8px;
+    max-height: 80px;
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .feedback-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .feedback-action-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .feedback-action-btn:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+  .feedback-action-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .feedback-action-btn.primary:hover {
+    background: var(--accent-light);
+  }
+  .pattern-suggestion {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
+    max-height: 200px;
+    overflow-y: auto;
+  }
 </style>
 </head>
 <body>
@@ -618,12 +771,43 @@ HTML_PAGE = """<!DOCTYPE html>
     <button class="btn-primary" onclick="saveSettings()" style="margin-top: 1rem;">Save Settings</button>
   </div>
   
+  <!-- Feedback Queue Panel -->
+  <div id="feedbackPanel" class="feedback-panel" style="display: none;">
+    <div class="feedback-header">
+      <h3>📊 Feedback Queue — Continuous Improvement</h3>
+      <button class="settings-close" onclick="toggleFeedback()">✕</button>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+      Unmatched errors are logged here for review. Use this to identify new patterns to add.
+    </p>
+    <div class="feedback-stats" id="feedbackStats">
+      <div class="stat-item">
+        <div class="stat-value" id="statPending">-</div>
+        <div class="stat-label">Pending</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statTotal">-</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statPatterns">-</div>
+        <div class="stat-label">Patterns Created</div>
+      </div>
+    </div>
+    <div class="feedback-list" id="feedbackList">
+      <p style="text-align: center; color: var(--text-dim);">Loading...</p>
+    </div>
+  </div>
+  
   <div class="main-card">
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <label class="input-label">
         <span>📋</span> Paste Your Logs
       </label>
-      <button class="settings-btn" onclick="toggleSettings()">⚙️ AI Settings</button>
+      <div>
+        <button class="settings-btn" onclick="toggleSettings()">⚙️ AI Settings</button>
+        <button class="feedback-btn" onclick="toggleFeedback()">📊 Feedback<span class="feedback-badge" id="feedbackBadge" style="display:none;">0</span></button>
+      </div>
     </div>
     <textarea id="logInput" placeholder="Paste your error log here...&#10;&#10;Examples:&#10;  • CrashLoopBackOff, OOMKilled&#10;  • CircuitBreakingException, unassigned shards&#10;  • ThrottlingException, AccessDenied&#10;  • NullPointerException, OutOfMemoryError&#10;  • kafka consumer lag, rebalance&#10;  • vault sealed, certificate expired"></textarea>
     
@@ -654,7 +838,169 @@ document.addEventListener('DOMContentLoaded', function() {
 function toggleSettings() {
   const panel = document.getElementById('settingsPanel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  // Close feedback panel if open
+  document.getElementById('feedbackPanel').style.display = 'none';
 }
+
+// ─── Feedback Queue Functions ───────────────────────────────────────────────
+function toggleFeedback() {
+  const panel = document.getElementById('feedbackPanel');
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'block' : 'none';
+  // Close settings panel if open
+  document.getElementById('settingsPanel').style.display = 'none';
+  
+  if (isHidden) {
+    loadFeedbackStats();
+    loadFeedbackList();
+  }
+}
+
+async function loadFeedbackStats() {
+  try {
+    const resp = await fetch('/feedback/stats');
+    const stats = await resp.json();
+    
+    document.getElementById('statPending').textContent = stats.pending || 0;
+    document.getElementById('statTotal').textContent = stats.total || 0;
+    document.getElementById('statPatterns').textContent = stats.pattern_created || 0;
+    
+    // Update badge
+    const badge = document.getElementById('feedbackBadge');
+    if (stats.pending > 0) {
+      badge.style.display = 'inline';
+      badge.textContent = stats.pending;
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('Failed to load feedback stats:', e);
+  }
+}
+
+async function loadFeedbackList() {
+  const list = document.getElementById('feedbackList');
+  
+  try {
+    const resp = await fetch('/feedback');
+    const errors = await resp.json();
+    
+    if (!errors || errors.length === 0) {
+      list.innerHTML = '<p style="text-align: center; color: var(--text-dim); padding: 2rem;">No unmatched errors logged yet. Great! All errors are matching patterns.</p>';
+      return;
+    }
+    
+    let html = '';
+    errors.forEach(err => {
+      const time = new Date(err.timestamp).toLocaleDateString();
+      const snippet = (err.log_snippet || '').substring(0, 200);
+      
+      html += `
+      <div class="feedback-item" data-id="${err.id}">
+        <div class="feedback-item-header">
+          <div class="feedback-item-meta">
+            <span class="feedback-count">×${err.count || 1}</span>
+            <span class="feedback-time">${time}</span>
+            <span style="font-size: 0.7rem; color: var(--text-dim);">${err.source || 'unknown'}</span>
+          </div>
+        </div>
+        <div class="feedback-snippet">${escapeHtml(snippet)}${snippet.length >= 200 ? '...' : ''}</div>
+        <div class="feedback-actions">
+          <button class="feedback-action-btn primary" onclick="suggestPattern(${err.id}, this)">💡 Suggest Pattern</button>
+          <button class="feedback-action-btn" onclick="markReviewed(${err.id})">✓ Reviewed</button>
+          <button class="feedback-action-btn" onclick="markIgnored(${err.id})">✕ Ignore</button>
+        </div>
+        <div class="pattern-suggestion" id="suggestion-${err.id}" style="display: none;"></div>
+      </div>`;
+    });
+    
+    list.innerHTML = html;
+  } catch (e) {
+    list.innerHTML = '<p style="text-align: center; color: var(--red);">Failed to load feedback queue.</p>';
+    console.error('Failed to load feedback list:', e);
+  }
+}
+
+async function suggestPattern(errorId, btn) {
+  const suggestionDiv = document.getElementById('suggestion-' + errorId);
+  
+  // Toggle if already showing
+  if (suggestionDiv.style.display === 'block') {
+    suggestionDiv.style.display = 'none';
+    return;
+  }
+  
+  const apiKey = localStorage.getItem('anthropic_key') || localStorage.getItem('openai_key');
+  if (!apiKey) {
+    suggestionDiv.innerHTML = '<p style="color: var(--yellow);">⚠️ Configure an AI API key in Settings to generate pattern suggestions.</p>';
+    suggestionDiv.style.display = 'block';
+    return;
+  }
+  
+  btn.textContent = '⏳ Generating...';
+  btn.disabled = true;
+  
+  try {
+    const resp = await fetch('/feedback/suggest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        error_id: errorId,
+        api_key: apiKey
+      })
+    });
+    const data = await resp.json();
+    
+    if (data.suggestion) {
+      suggestionDiv.innerHTML = `<strong style="color: var(--green);">📋 Suggested Pattern (copy to log_analyser.py):</strong>\\n\\n${escapeHtml(data.suggestion)}`;
+    } else {
+      suggestionDiv.innerHTML = `<p style="color: var(--red);">❌ ${data.error || 'Failed to generate suggestion'}</p>`;
+    }
+    suggestionDiv.style.display = 'block';
+  } catch (e) {
+    suggestionDiv.innerHTML = '<p style="color: var(--red);">❌ Failed to connect to server.</p>';
+    suggestionDiv.style.display = 'block';
+  } finally {
+    btn.textContent = '💡 Suggest Pattern';
+    btn.disabled = false;
+  }
+}
+
+async function markReviewed(errorId) {
+  await updateFeedbackStatus(errorId, 'reviewed');
+}
+
+async function markIgnored(errorId) {
+  await updateFeedbackStatus(errorId, 'ignored');
+}
+
+async function updateFeedbackStatus(errorId, status) {
+  try {
+    await fetch('/feedback/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error_id: errorId, status: status })
+    });
+    
+    // Remove the item from the list with animation
+    const item = document.querySelector(`.feedback-item[data-id="${errorId}"]`);
+    if (item) {
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(-20px)';
+      setTimeout(() => {
+        item.remove();
+        loadFeedbackStats();
+      }, 300);
+    }
+  } catch (e) {
+    console.error('Failed to update feedback status:', e);
+  }
+}
+
+// Load feedback badge count on page load
+document.addEventListener('DOMContentLoaded', function() {
+  loadFeedbackStats();
+});
 
 function saveSettings() {
   const anthropicKey = document.getElementById('anthropicKey').value.trim();
@@ -879,7 +1225,26 @@ document.getElementById('logInput').addEventListener('keydown', function(e) {
 # ─── Web Server ───────────────────────────────────────────────────────────────
 class LogAnalyzerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        """Serve the HTML page."""
+        """Serve the HTML page or API endpoints."""
+        # Feedback queue stats
+        if self.path == '/feedback/stats':
+            stats = get_feedback_stats()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(stats).encode())
+            return
+        
+        # Feedback queue list
+        if self.path == '/feedback':
+            errors = get_unmatched_errors(status_filter='pending', limit=50)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(errors).encode())
+            return
+        
+        # Serve main HTML page
         page = HTML_PAGE.replace('PATTERN_COUNT', str(len(PATTERNS)))
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -887,14 +1252,69 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
         self.wfile.write(page.encode())
 
     def do_POST(self):
-        """Handle log analysis requests."""
+        """Handle log analysis and feedback requests."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode()
+        
+        # Update feedback status
+        if self.path == '/feedback/update':
+            try:
+                data = json.loads(body)
+                error_id = data.get('error_id')
+                status = data.get('status')
+                success = update_unmatched_error(error_id, status=status)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": success}).encode())
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+            return
+        
+        # Generate pattern suggestion
+        if self.path == '/feedback/suggest':
+            try:
+                data = json.loads(body)
+                error_id = data.get('error_id')
+                api_key = data.get('api_key')
+                
+                # Get the error log
+                errors = get_unmatched_errors(limit=500)
+                error_log = None
+                for err in errors:
+                    if err.get('id') == error_id:
+                        error_log = err.get('log_snippet', '')
+                        break
+                
+                if not error_log:
+                    self.send_response(404)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Error not found"}).encode())
+                    return
+                
+                suggestion = suggest_pattern_from_log(error_log, api_key=api_key)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"suggestion": suggestion}).encode())
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+            return
+        
+        # Log analysis
         if self.path != '/analyze':
             self.send_response(404)
             self.end_headers()
             return
-
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length).decode()
 
         try:
             data = json.loads(body)
@@ -924,22 +1344,26 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
             "ai_error": None
         }
 
-        # If no pattern matches, try AI analysis
-        if not matches and (anthropic_key or openai_key):
-            print(f"  🤖 No patterns matched. Trying AI analysis...")
-            try:
-                ai_result = analyze_with_ai(logs, anthropic_key=anthropic_key, openai_key=openai_key)
-                if ai_result:
-                    ai_name, ai_response = ai_result
-                    result["ai_analysis"] = ai_response
-                    result["ai_provider"] = ai_name
-                    print(f"  ✅ AI analysis successful ({ai_name})")
-                else:
-                    result["ai_error"] = "AI did not return a result. Check API key validity."
-                    print(f"  ❌ AI analysis returned no result")
-            except Exception as e:
-                result["ai_error"] = str(e)
-                print(f"  ❌ AI analysis error: {e}")
+        # If no pattern matches, log for feedback loop and try AI analysis
+        if not matches:
+            log_unmatched_error(logs, source="web")
+            print(f"  📝 Unmatched error logged for feedback")
+            
+            if anthropic_key or openai_key:
+                print(f"  🤖 No patterns matched. Trying AI analysis...")
+                try:
+                    ai_result = analyze_with_ai(logs, anthropic_key=anthropic_key, openai_key=openai_key)
+                    if ai_result:
+                        ai_name, ai_response = ai_result
+                        result["ai_analysis"] = ai_response
+                        result["ai_provider"] = ai_name
+                        print(f"  ✅ AI analysis successful ({ai_name})")
+                    else:
+                        result["ai_error"] = "AI did not return a result. Check API key validity."
+                        print(f"  ❌ AI analysis returned no result")
+                except Exception as e:
+                    result["ai_error"] = str(e)
+                    print(f"  ❌ AI analysis error: {e}")
 
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')

@@ -8,6 +8,233 @@ Optionally uses OpenAI GPT for deeper analysis (set OPENAI_API_KEY).
 import re
 import os
 import sys
+import json
+from datetime import datetime
+
+# ─── Feedback Loop: Track unmatched errors for continuous improvement ────────
+UNMATCHED_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unmatched_errors.json")
+
+def log_unmatched_error(logs, source="unknown"):
+    """Log an unmatched error for future review and pattern creation."""
+    try:
+        # Load existing entries
+        entries = []
+        if os.path.exists(UNMATCHED_LOG_FILE):
+            with open(UNMATCHED_LOG_FILE, "r") as f:
+                entries = json.load(f)
+        
+        # Create a fingerprint from the first 200 chars to avoid exact duplicates
+        fingerprint = logs[:200].strip()
+        
+        # Check if similar error already logged (avoid duplicates)
+        for entry in entries:
+            if entry.get("fingerprint") == fingerprint:
+                entry["count"] = entry.get("count", 1) + 1
+                entry["last_seen"] = datetime.now().isoformat()
+                with open(UNMATCHED_LOG_FILE, "w") as f:
+                    json.dump(entries, f, indent=2)
+                return False  # Already exists, just updated count
+        
+        # Add new entry
+        entry = {
+            "id": len(entries) + 1,
+            "timestamp": datetime.now().isoformat(),
+            "last_seen": datetime.now().isoformat(),
+            "source": source,
+            "log_snippet": logs[:2000],  # Keep first 2000 chars
+            "fingerprint": fingerprint,
+            "count": 1,
+            "status": "pending",  # pending, reviewed, pattern_created, ignored
+            "notes": ""
+        }
+        entries.append(entry)
+        
+        # Keep only last 500 entries
+        if len(entries) > 500:
+            entries = entries[-500:]
+        
+        with open(UNMATCHED_LOG_FILE, "w") as f:
+            json.dump(entries, f, indent=2)
+        
+        return True  # New entry added
+    except Exception as e:
+        print(f"Warning: Could not log unmatched error: {e}")
+        return False
+
+
+def get_unmatched_errors(status_filter=None, limit=50):
+    """Retrieve unmatched errors for review."""
+    try:
+        if not os.path.exists(UNMATCHED_LOG_FILE):
+            return []
+        
+        with open(UNMATCHED_LOG_FILE, "r") as f:
+            entries = json.load(f)
+        
+        if status_filter:
+            entries = [e for e in entries if e.get("status") == status_filter]
+        
+        # Sort by count (most frequent first), then by timestamp
+        entries.sort(key=lambda x: (-x.get("count", 1), x.get("timestamp", "")))
+        
+        return entries[:limit]
+    except Exception as e:
+        print(f"Warning: Could not read unmatched errors: {e}")
+        return []
+
+
+def update_unmatched_error(error_id, status=None, notes=None):
+    """Update status or notes for an unmatched error."""
+    try:
+        if not os.path.exists(UNMATCHED_LOG_FILE):
+            return False
+        
+        with open(UNMATCHED_LOG_FILE, "r") as f:
+            entries = json.load(f)
+        
+        for entry in entries:
+            if entry.get("id") == error_id:
+                if status:
+                    entry["status"] = status
+                if notes:
+                    entry["notes"] = notes
+                break
+        
+        with open(UNMATCHED_LOG_FILE, "w") as f:
+            json.dump(entries, f, indent=2)
+        
+        return True
+    except Exception as e:
+        print(f"Warning: Could not update unmatched error: {e}")
+        return False
+
+
+def clear_unmatched_errors(status=None):
+    """Clear unmatched errors (all or by status)."""
+    try:
+        if status:
+            if os.path.exists(UNMATCHED_LOG_FILE):
+                with open(UNMATCHED_LOG_FILE, "r") as f:
+                    entries = json.load(f)
+                entries = [e for e in entries if e.get("status") != status]
+                with open(UNMATCHED_LOG_FILE, "w") as f:
+                    json.dump(entries, f, indent=2)
+        else:
+            if os.path.exists(UNMATCHED_LOG_FILE):
+                os.remove(UNMATCHED_LOG_FILE)
+        return True
+    except Exception as e:
+        print(f"Warning: Could not clear unmatched errors: {e}")
+        return False
+
+
+def get_feedback_stats():
+    """Get statistics about the feedback queue."""
+    try:
+        if not os.path.exists(UNMATCHED_LOG_FILE):
+            return {"total": 0, "pending": 0, "reviewed": 0, "pattern_created": 0, "ignored": 0}
+        
+        with open(UNMATCHED_LOG_FILE, "r") as f:
+            entries = json.load(f)
+        
+        stats = {
+            "total": len(entries),
+            "pending": sum(1 for e in entries if e.get("status") == "pending"),
+            "reviewed": sum(1 for e in entries if e.get("status") == "reviewed"),
+            "pattern_created": sum(1 for e in entries if e.get("status") == "pattern_created"),
+            "ignored": sum(1 for e in entries if e.get("status") == "ignored"),
+            "most_frequent": []
+        }
+        
+        # Top 5 most frequent unmatched errors
+        pending = [e for e in entries if e.get("status") == "pending"]
+        pending.sort(key=lambda x: -x.get("count", 1))
+        stats["most_frequent"] = pending[:5]
+        
+        return stats
+    except Exception as e:
+        return {"total": 0, "pending": 0, "reviewed": 0, "pattern_created": 0, "ignored": 0, "error": str(e)}
+
+
+def suggest_pattern_from_log(logs, api_key=None):
+    """Use AI to suggest a pattern definition for an unmatched error."""
+    try:
+        import urllib.request
+        import urllib.error
+        
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return None
+        
+        prompt = f"""You are a senior SRE engineer. Based on this error log, generate a pattern definition for a log analyzer.
+
+Output ONLY valid Python code for a pattern dict with these fields:
+- regex: A Python regex pattern that would match this error (use (?i) for case-insensitive)
+- summary: One-line summary of the error
+- cause: What causes this error
+- impact: What breaks when this occurs
+- fix: List of step-by-step fix instructions (as strings in a list)
+- severity: "High", "Medium", or "Low"
+
+Error log:
+{logs[:3000]}
+
+Output format (Python dict only, no explanation):
+{{
+    "regex": r"...",
+    "summary": "...",
+    "cause": "...",
+    "impact": "...",
+    "fix": ["Step 1 — ...", "Step 2 — ..."],
+    "severity": "High"
+}}
+"""
+        
+        # Determine which API to use based on key format
+        if api_key.startswith("sk-ant"):
+            # Claude API
+            data = json.dumps({
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1500,
+                "messages": [{"role": "user", "content": prompt}]
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01"
+                }
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result["content"][0]["text"]
+        else:
+            # OpenAI API
+            data = json.dumps({
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}"
+                }
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result["choices"][0]["message"]["content"]
+    
+    except Exception as e:
+        return f"Error generating pattern: {e}"
 
 # ─── Color helpers ───────────────────────────────────────────────────────────
 RED    = "\033[91m"
@@ -13862,10 +14089,15 @@ def analyze_with_ai(logs, anthropic_key=None, openai_key=None):
     return None
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
-def run_analysis(logs):
+def run_analysis(logs, source="cli"):
     """Run the analysis on the given log text."""
     matches = analyze_offline(logs)
     print_analysis(matches, logs)
+
+    # If no patterns matched, log for feedback loop
+    if not matches:
+        if log_unmatched_error(logs, source):
+            print(color("  📝 Logged for review (feedback loop enabled)\n", DIM))
 
     # If no patterns matched, try AI analysis
     has_api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
