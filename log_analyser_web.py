@@ -732,6 +732,20 @@ function renderResults(data) {
   
   if (!data.matches || data.matches.length === 0) {
     const hasKeys = hasApiKeys();
+    
+    // Show AI error if there was one
+    if (data.ai_error) {
+      el.innerHTML = `<div class="no-match-card" style="border-color: var(--red-glow);">
+        <h3 style="color: var(--red);">❌ AI Analysis Failed</h3>
+        <p>${escapeHtml(data.ai_error)}</p>
+        <p style="font-size: 0.85rem; margin-top: 1rem;">Check that your API key is valid and has credits.</p>
+        <button class="btn-primary" onclick="toggleSettings()" style="margin-top: 1rem;">
+          <span>⚙️</span> Check AI Settings
+        </button>
+      </div>`;
+      return;
+    }
+    
     if (hasKeys) {
       el.innerHTML = '<div class="no-match-card"><h3>⚠️ No Match Found</h3><p>This error doesn\\'t match any of our 563 built-in patterns, and AI analysis didn\\'t return results.<br>Try pasting a more complete error log.</p></div>';
     } else {
@@ -906,37 +920,26 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
                 for m in matches
             ],
             "ai_analysis": None,
-            "ai_provider": None
+            "ai_provider": None,
+            "ai_error": None
         }
 
         # If no pattern matches, try AI analysis
-        if not matches:
-            # Temporarily set env vars for AI analysis
-            old_anthropic = os.environ.get('ANTHROPIC_API_KEY')
-            old_openai = os.environ.get('OPENAI_API_KEY')
-            
-            if anthropic_key:
-                os.environ['ANTHROPIC_API_KEY'] = anthropic_key
-            if openai_key:
-                os.environ['OPENAI_API_KEY'] = openai_key
-            
+        if not matches and (anthropic_key or openai_key):
+            print(f"  🤖 No patterns matched. Trying AI analysis...")
             try:
-                ai_result = analyze_with_ai(logs)
+                ai_result = analyze_with_ai(logs, anthropic_key=anthropic_key, openai_key=openai_key)
                 if ai_result:
                     ai_name, ai_response = ai_result
                     result["ai_analysis"] = ai_response
                     result["ai_provider"] = ai_name
-            finally:
-                # Restore original env vars
-                if old_anthropic:
-                    os.environ['ANTHROPIC_API_KEY'] = old_anthropic
-                elif 'ANTHROPIC_API_KEY' in os.environ and anthropic_key:
-                    del os.environ['ANTHROPIC_API_KEY']
-                    
-                if old_openai:
-                    os.environ['OPENAI_API_KEY'] = old_openai
-                elif 'OPENAI_API_KEY' in os.environ and openai_key:
-                    del os.environ['OPENAI_API_KEY']
+                    print(f"  ✅ AI analysis successful ({ai_name})")
+                else:
+                    result["ai_error"] = "AI did not return a result. Check API key validity."
+                    print(f"  ❌ AI analysis returned no result")
+            except Exception as e:
+                result["ai_error"] = str(e)
+                print(f"  ❌ AI analysis error: {e}")
 
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')

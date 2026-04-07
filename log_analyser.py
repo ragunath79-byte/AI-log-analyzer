@@ -13741,13 +13741,14 @@ def print_analysis(matches, logs):
     print(f"\n  {color('━' * 60, DIM)}\n")
 
 # ─── Optional: AI-powered deep analysis (Claude or OpenAI) ──────────────────
-def analyze_with_claude(logs):
-    """Use Claude (Anthropic) for deeper analysis if ANTHROPIC_API_KEY is set."""
+def analyze_with_claude(logs, api_key=None):
+    """Use Claude (Anthropic) for deeper analysis."""
     try:
         import urllib.request
+        import urllib.error
         import json
         
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             return None
 
@@ -13783,17 +13784,22 @@ Logs:
         with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result["content"][0]["text"]
+    except urllib.error.HTTPError as e:
+        print(f"  ❌ Claude API error: {e.code} - {e.reason}")
+        return None
     except Exception as e:
+        print(f"  ❌ Claude error: {e}")
         return None
 
 
-def analyze_with_openai(logs):
-    """Use OpenAI GPT for deeper analysis if OPENAI_API_KEY is set."""
+def analyze_with_openai(logs, api_key=None):
+    """Use OpenAI GPT for deeper analysis."""
     try:
         import urllib.request
+        import urllib.error
         import json
         
-        api_key = os.environ.get("OPENAI_API_KEY")
+        api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not api_key:
             return None
 
@@ -13828,21 +13834,28 @@ Logs:
         with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result["choices"][0]["message"]["content"]
+    except urllib.error.HTTPError as e:
+        print(f"  ❌ OpenAI API error: {e.code} - {e.reason}")
+        return None
     except Exception as e:
+        print(f"  ❌ OpenAI error: {e}")
         return None
 
 
-def analyze_with_ai(logs):
+def analyze_with_ai(logs, anthropic_key=None, openai_key=None):
     """Try Claude first, then OpenAI as fallback."""
+    anthropic_key = anthropic_key or os.environ.get("ANTHROPIC_API_KEY")
+    openai_key = openai_key or os.environ.get("OPENAI_API_KEY")
+    
     # Try Claude first
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        result = analyze_with_claude(logs)
+    if anthropic_key:
+        result = analyze_with_claude(logs, anthropic_key)
         if result:
             return ("Claude", result)
     
     # Fallback to OpenAI
-    if os.environ.get("OPENAI_API_KEY"):
-        result = analyze_with_openai(logs)
+    if openai_key:
+        result = analyze_with_openai(logs, openai_key)
         if result:
             return ("ChatGPT", result)
     
