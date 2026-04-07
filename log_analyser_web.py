@@ -23,7 +23,8 @@ try:
     from log_analyser import (
         PATTERNS, analyze_offline, analyze_with_ai,
         log_unmatched_error, get_unmatched_errors, update_unmatched_error,
-        clear_unmatched_errors, get_feedback_stats, suggest_pattern_from_log
+        clear_unmatched_errors, get_feedback_stats, suggest_pattern_from_log,
+        create_github_issue, get_github_issues
     )
 except ImportError:
     print("❌ Error: log_analyser.py must be in the same directory.")
@@ -752,12 +753,14 @@ HTML_PAGE = """<!DOCTYPE html>
   <!-- Settings Panel -->
   <div id="settingsPanel" class="settings-panel" style="display: none;">
     <div class="settings-header">
-      <h3>⚙️ AI Settings (Optional)</h3>
+      <h3>⚙️ Settings</h3>
       <button class="settings-close" onclick="toggleSettings()">✕</button>
     </div>
     <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
-      Add an API key to analyze errors that don't match built-in patterns. Keys are stored locally in your browser.
+      Configure API keys. All keys are stored locally in your browser.
     </p>
+    
+    <h4 style="color: var(--text-primary); font-size: 0.9rem; margin: 1rem 0 0.5rem;">AI Analysis (Optional)</h4>
     <div class="settings-field">
       <label>Claude API Key (Anthropic)</label>
       <input type="password" id="anthropicKey" placeholder="sk-ant-api03-..." />
@@ -768,6 +771,21 @@ HTML_PAGE = """<!DOCTYPE html>
       <input type="password" id="openaiKey" placeholder="sk-..." />
       <a href="https://platform.openai.com/api-keys" target="_blank" style="font-size: 0.75rem; color: var(--accent-light);">Get key →</a>
     </div>
+    
+    <h4 style="color: var(--text-primary); font-size: 0.9rem; margin: 1.5rem 0 0.5rem;">GitHub Integration (Team Sharing)</h4>
+    <p style="color: var(--text-dim); font-size: 0.8rem; margin-bottom: 0.5rem;">
+      Enable to share unmatched errors as GitHub Issues for team visibility.
+    </p>
+    <div class="settings-field">
+      <label>GitHub Token (Personal Access Token)</label>
+      <input type="password" id="githubToken" placeholder="ghp_..." />
+      <a href="https://github.com/settings/tokens" target="_blank" style="font-size: 0.75rem; color: var(--accent-light);">Create token →</a>
+    </div>
+    <div class="settings-field" style="display: flex; align-items: center; gap: 0.5rem;">
+      <input type="checkbox" id="autoCreateIssue" style="width: auto;" />
+      <label for="autoCreateIssue" style="margin: 0; cursor: pointer;">Auto-create GitHub Issue for unmatched errors</label>
+    </div>
+    
     <button class="btn-primary" onclick="saveSettings()" style="margin-top: 1rem;">Save Settings</button>
   </div>
   
@@ -780,6 +798,9 @@ HTML_PAGE = """<!DOCTYPE html>
     <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
       Unmatched errors are logged here for review. Use this to identify new patterns to add.
     </p>
+    <div style="margin-bottom: 1rem;">
+      <button class="feedback-action-btn" onclick="loadGitHubIssues()" style="margin-right: 0.5rem;">🔗 View GitHub Issues</button>
+    </div>
     <div class="feedback-stats" id="feedbackStats">
       <div class="stat-item">
         <div class="stat-value" id="statPending">-</div>
@@ -833,6 +854,8 @@ HTML_PAGE = """<!DOCTYPE html>
 document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('anthropicKey').value = localStorage.getItem('anthropic_key') || '';
   document.getElementById('openaiKey').value = localStorage.getItem('openai_key') || '';
+  document.getElementById('githubToken').value = localStorage.getItem('github_token') || '';
+  document.getElementById('autoCreateIssue').checked = localStorage.getItem('auto_create_issue') === 'true';
 });
 
 function toggleSettings() {
@@ -1005,6 +1028,8 @@ document.addEventListener('DOMContentLoaded', function() {
 function saveSettings() {
   const anthropicKey = document.getElementById('anthropicKey').value.trim();
   const openaiKey = document.getElementById('openaiKey').value.trim();
+  const githubToken = document.getElementById('githubToken').value.trim();
+  const autoCreateIssue = document.getElementById('autoCreateIssue').checked;
   
   if (anthropicKey) localStorage.setItem('anthropic_key', anthropicKey);
   else localStorage.removeItem('anthropic_key');
@@ -1012,16 +1037,57 @@ function saveSettings() {
   if (openaiKey) localStorage.setItem('openai_key', openaiKey);
   else localStorage.removeItem('openai_key');
   
+  if (githubToken) localStorage.setItem('github_token', githubToken);
+  else localStorage.removeItem('github_token');
+  
+  localStorage.setItem('auto_create_issue', autoCreateIssue ? 'true' : 'false');
+  
   toggleSettings();
   
   // Show confirmation
   const results = document.getElementById('results');
-  results.innerHTML = '<div class="summary-bar" style="background: var(--green-glow); border-color: var(--green);"><div class="icon" style="background: var(--green);">✓</div><div><div class="count" style="color: var(--green);">Settings Saved</div><div class="label">AI fallback is now enabled for unknown errors</div></div></div>';
+  const githubMsg = githubToken ? ' GitHub integration enabled.' : '';
+  results.innerHTML = `<div class="summary-bar" style="background: var(--green-glow); border-color: var(--green);"><div class="icon" style="background: var(--green);">✓</div><div><div class="count" style="color: var(--green);">Settings Saved</div><div class="label">Configuration updated.${githubMsg}</div></div></div>`;
   setTimeout(() => results.innerHTML = '', 3000);
 }
 
 function hasApiKeys() {
   return localStorage.getItem('anthropic_key') || localStorage.getItem('openai_key');
+}
+
+function hasGitHubToken() {
+  return localStorage.getItem('github_token');
+}
+
+async function loadGitHubIssues() {
+  const githubToken = localStorage.getItem('github_token');
+  if (!githubToken) {
+    alert('Please configure GitHub Token in Settings first.');
+    return;
+  }
+  
+  try {
+    const resp = await fetch('/github/issues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ github_token: githubToken })
+    });
+    const data = await resp.json();
+    
+    if (data.success && data.issues.length > 0) {
+      // Open first issue in new tab, or show list
+      const list = data.issues.map(i => `• #${i.number}: ${i.title}`).join('\\n');
+      if (confirm(`Found ${data.issues.length} unmatched error issues:\\n\\n${list.substring(0, 500)}\\n\\nOpen GitHub Issues page?`)) {
+        window.open(`https://github.com/ragunath79-byte/AI-log-analyzer/issues?q=is%3Aissue+label%3Aunmatched-error`, '_blank');
+      }
+    } else if (data.success) {
+      alert('No unmatched error issues found in GitHub.');
+    } else {
+      alert('Failed to fetch GitHub issues: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Error connecting to server: ' + e.message);
+  }
 }
 
 async function analyze() {
@@ -1037,7 +1103,9 @@ async function analyze() {
     const payload = { 
       logs,
       anthropic_key: localStorage.getItem('anthropic_key') || '',
-      openai_key: localStorage.getItem('openai_key') || ''
+      openai_key: localStorage.getItem('openai_key') || '',
+      github_token: localStorage.getItem('github_token') || '',
+      auto_create_issue: localStorage.getItem('auto_create_issue') === 'true'
     };
     
     const resp = await fetch('/analyze', {
@@ -1256,6 +1324,24 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length).decode()
         
+        # GitHub Issues endpoint
+        if self.path == '/github/issues':
+            try:
+                data = json.loads(body)
+                github_token = data.get('github_token')
+                result = get_github_issues(github_token=github_token)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e), "issues": []}).encode())
+            return
+        
         # Update feedback status
         if self.path == '/feedback/update':
             try:
@@ -1321,10 +1407,14 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
             logs = data.get('logs', '')
             anthropic_key = data.get('anthropic_key', '')
             openai_key = data.get('openai_key', '')
+            github_token = data.get('github_token', '')
+            auto_create_issue = data.get('auto_create_issue', False)
         except json.JSONDecodeError:
             logs = body
             anthropic_key = ''
             openai_key = ''
+            github_token = ''
+            auto_create_issue = False
 
         matches = analyze_offline(logs)
 
@@ -1341,13 +1431,25 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
             ],
             "ai_analysis": None,
             "ai_provider": None,
-            "ai_error": None
+            "ai_error": None,
+            "github_issue": None
         }
 
         # If no pattern matches, log for feedback loop and try AI analysis
         if not matches:
-            log_unmatched_error(logs, source="web")
+            # Log to local file and optionally create GitHub issue
+            log_result = log_unmatched_error(
+                logs, 
+                source="web",
+                create_issue=auto_create_issue,
+                github_token=github_token
+            )
             print(f"  📝 Unmatched error logged for feedback")
+            
+            # Include GitHub issue info in response
+            if log_result and log_result.get("github_issue"):
+                result["github_issue"] = log_result["github_issue"]
+                print(f"  🔗 GitHub Issue created: #{log_result['github_issue']['number']}")
             
             if anthropic_key or openai_key:
                 print(f"  🤖 No patterns matched. Trying AI analysis...")
