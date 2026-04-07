@@ -41,6 +41,8 @@
 │     │  HTML/CSS/JavaScript UI (served by Python server) │       │
 │     │  • Textarea for pasting logs                      │       │
 │     │  • "Analyze" button triggers POST /analyze        │       │
+│     │  • ⚙️ AI Settings panel (optional API keys)         │       │
+│     │  • 📊 Feedback panel (unmatched errors queue)      │       │
 │     └───────────────────────────────────────────────────┘       │
 └────────────────────────────┬────────────────────────────────────┘
                              │ HTTP POST /analyze
@@ -50,13 +52,17 @@
 │     • Built-in Python HTTP server (no Flask/Django needed)      │
 │     • GET / → serves the HTML page                              │
 │     • POST /analyze → calls analyze_offline()                   │
+│     • GET /feedback → returns unmatched errors queue            │
+│     • POST /feedback/suggest → AI generates pattern code        │
 └────────────────────────────┬────────────────────────────────────┘
                              │ imports
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    log_analyser.py (Engine)                     │
-│     • PATTERNS[] → 121 regex patterns with fixes                │
+│     • PATTERNS[] → 563 regex patterns with fixes                │
 │     • analyze_offline(logs) → matches text against patterns     │
+│     • analyze_with_ai() → Claude/ChatGPT fallback (optional)    │
+│     • log_unmatched_error() → feedback loop logging             │
 │     • Returns: summary, cause, impact, severity, fix steps      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -110,10 +116,11 @@ def analyze_offline(logs):
 | Step | What Happens |
 |------|--------------|
 | 1 | Takes the pasted log text as input |
-| 2 | Loops through all 121 patterns |
+| 2 | Loops through all 563 patterns |
 | 3 | Uses Python **regex** (`re.search`) to match each pattern |
 | 4 | Avoids duplicates using a `seen` set |
-| 5 | Returns all matched patterns with fix instructions |
+| 5 | If no match, logs to feedback queue + tries AI (if configured) |
+| 6 | Returns all matched patterns with fix instructions |
 
 ### Pattern Structure
 
@@ -138,6 +145,54 @@ Each pattern in `PATTERNS[]` contains:
 
 ---
 
+## 🔄 Feedback Loop
+
+The feedback loop ensures the tool improves over time by tracking unmatched errors.
+
+### How It Works
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  1. User pastes log → No pattern matches                         │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  2. AUTO-LOGGED to unmatched_errors.json                         │
+│     • Deduplicated (fingerprint-based)                           │
+│     • Count increments for repeat occurrences                    │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  3. VISIBLE in Web UI (📊 Feedback button)                       │
+│     • Stats: pending / reviewed / patterns created               │
+│     • Sorted by frequency (most common first)                    │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  4. ACTIONS for each error:                                      │
+│     • 💡 Suggest Pattern → AI generates Python code              │
+│     • ✓ Reviewed → Mark as seen                                  │
+│     • ✕ Ignore → Remove from queue                               │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Demo the Feedback Loop
+
+1. Click **📊 Feedback** button in the UI
+2. Show the stats panel (pending/total/patterns created)
+3. If there are unmatched errors:
+   - Click **💡 Suggest Pattern** → AI generates copy-paste code
+   - Click **✓ Reviewed** or **✕ Ignore** to manage the queue
+
+### Key Talking Points
+
+> *"The system continuously improves through human-curated feedback. Unmatched errors are tracked, ranked by frequency, and engineers can use AI to generate pattern code."*
+
+---
+
 ## 🎤 Likely Demo Questions & Answers
 
 ### Architecture & Design
@@ -154,10 +209,11 @@ Each pattern in `PATTERNS[]` contains:
 
 | Question | Answer |
 |----------|--------|
-| **How many errors can it detect?** | 121 patterns covering K8s, OpenSearch, Vault, TLS/SSL, Java, Python, Go, DNS, etc. |
+| **How many errors can it detect?** | 563 patterns covering K8s, Elasticsearch, Kafka, AWS, Vault, Terraform, Java, Python, etc. |
 | **How does pattern matching work?** | Uses Python regex (`re.search`) to find known error signatures in the log text |
-| **Why regex instead of AI?** | Deterministic, fast, works offline, no API cost. AI is optional add-on |
-| **What if no pattern matches?** | Shows "No known patterns matched" — user can add new patterns or enable OpenAI |
+| **Why regex instead of AI?** | Deterministic, fast, works offline, no API cost. AI is optional fallback |
+| **What if no pattern matches?** | Logged to feedback queue + optionally analyzed by Claude/ChatGPT |
+| **Does it learn over time?** | Yes — feedback loop tracks unmatched errors for human review and pattern creation |
 | **How accurate is it?** | Very accurate for known patterns. Regex matches exact error signatures |
 
 ### Usage & Extensibility
@@ -195,7 +251,7 @@ python3 log_analyser_web.py --port 8080
 ║   🔍  AI Log Analyzer — Web UI                              ║
 ║                                                              ║
 ║   Open in browser:  http://localhost:8080                    ║
-║   121 error patterns loaded                                  ║
+║   563 error patterns loaded                                  ║
 ║                                                              ║
 ║   Press Ctrl+C to stop                                       ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -228,6 +284,8 @@ Copy and paste each one to show different error types:
 - ✅ **Copy commands** — click to copy fix commands
 - ✅ **Real patterns** — from actual production issues
 - ✅ **Step-by-step fixes** — not just "fix it"
+- ✅ **Feedback loop** — unmatched errors logged for review
+- ✅ **Optional AI** — Claude/ChatGPT for unknown errors
 
 ### 5. Show Output Components
 
@@ -244,17 +302,21 @@ For each matched issue, show:
 
 | Category | Count | Example Errors |
 |----------|-------|----------------|
-| **Kubernetes** | 20+ | CrashLoopBackOff, OOMKilled, ImagePullBackOff, probes failed, RBAC denied |
-| **Networking** | 15+ | Connection refused, timeout, 502/503/504 errors, DNS failures |
-| **OpenSearch/Elastic** | 10+ | Mapping conflicts, mapper_parsing_exception, index errors |
-| **Vault** | 5+ | Permission denied, sealed vault, token expired |
-| **TLS/SSL** | 10+ | Certificate expired, untrusted CA, handshake failed |
-| **Python** | 15+ | ModuleNotFoundError, TypeError, ImportError, KeyError |
-| **Java** | 15+ | NullPointerException, ClassNotFoundException, OutOfMemoryError |
-| **Go** | 5+ | Panic, nil pointer dereference, deadlock |
-| **Terraform** | 5+ | State lock, provider issues, resource conflicts |
-| **DNS** | 5+ | NXDOMAIN, resolution failed, timeout |
-| **Database** | 10+ | Connection pool exhausted, deadlock, timeout |
+| **Kubernetes** | 40+ | CrashLoopBackOff, OOMKilled, ImagePullBackOff, probes failed, RBAC denied |
+| **Elasticsearch** | 24 | Circuit breaker, mapping conflicts, unassigned shards |
+| **Kafka** | 27 | Consumer lag, rebalance, broker errors |
+| **AWS** | 12 | ThrottlingException, AccessDenied, S3/EC2/Lambda |
+| **Vault** | 16 | Permission denied, sealed vault, token expired |
+| **Terraform** | 20 | State lock, provider issues, resource conflicts |
+| **Prometheus** | 20 | Scrape errors, TSDB, alerting |
+| **PostgreSQL** | 7 | Connection pool, deadlock, replication |
+| **MongoDB** | 7 | Replica set, auth, disk space |
+| **Docker** | 8 | Build failures, network, volume, OOM |
+| **Nginx** | 7 | Upstream timeout, SSL, DNS |
+| **Java/Spring** | 17 | NullPointerException, OOM, Bean creation, Hibernate |
+| **Python** | 8 | ModuleNotFoundError, TypeError, ImportError |
+| **Gardener** | 24 | Shoot, Seed, gardenlet errors |
+| **Fluent Bit** | 13 | Input/output, backpressure |
 
 ---
 
@@ -281,8 +343,9 @@ Press `Ctrl+C` in the terminal
 
 ```
 /Users/I312404/
-├── log_analyser.py        # Pattern engine (121 patterns)
-└── log_analyser_web.py    # Web server + UI
+├── log_analyser.py        # Pattern engine (563 patterns + AI fallback + feedback loop)
+├── log_analyser_web.py    # Web server + UI
+└── unmatched_errors.json  # Feedback queue (auto-created)
 ```
 
 ---

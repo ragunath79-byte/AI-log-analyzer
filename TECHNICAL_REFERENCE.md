@@ -408,7 +408,78 @@ If the AI API call fails (rate limit, invalid key, network error):
 
 ---
 
-## 10. Adding a New Pattern
+## 10. Feedback Loop — Continuous Improvement
+
+The feedback loop ensures the tool improves over time by tracking unmatched errors.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Unmatched Error                              │
+│              (No pattern matches)                               │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  1. LOGGED automatically to unmatched_errors.json              │
+│     • Deduplicated (fingerprint-based)                         │
+│     • Count incremented for repeat occurrences                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  2. VISIBLE in Web UI (📊 Feedback button)                      │
+│     • Stats: pending / reviewed / patterns created             │
+│     • List sorted by frequency (most common first)             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  3. ACTIONS for each error:                                     │
+│     • 💡 Suggest Pattern → AI generates Python code             │
+│     • ✓ Reviewed → Mark as reviewed                            │
+│     • ✕ Ignore → Exclude from queue                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/feedback` | GET | List pending unmatched errors |
+| `/feedback/stats` | GET | Get queue statistics |
+| `/feedback/update` | POST | Update error status |
+| `/feedback/suggest` | POST | Generate pattern suggestion via AI |
+
+### Data Structure (unmatched_errors.json)
+
+```json
+{
+  "id": 1,
+  "timestamp": "2026-04-07T12:30:00",
+  "last_seen": "2026-04-07T14:15:00",
+  "source": "web",
+  "log_snippet": "Error: XYZ failed...",
+  "fingerprint": "Error: XYZ...",
+  "count": 5,
+  "status": "pending",
+  "notes": ""
+}
+```
+
+### Status Values
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | New, needs review |
+| `reviewed` | Reviewed but no action taken |
+| `pattern_created` | New pattern added for this error |
+| `ignored` | Not worth adding as pattern |
+
+---
+
+## 11. Adding a New Pattern
 
 ```python
 # In log_analyser.py, add to PATTERNS list:
@@ -433,7 +504,7 @@ If the AI API call fails (rate limit, invalid key, network error):
 
 ---
 
-## 11. Pattern Categories (563 Total)
+## 12. Pattern Categories (563 Total)
 
 | Category | Count | Examples |
 |----------|-------|----------|
@@ -460,7 +531,7 @@ If the AI API call fails (rate limit, invalid key, network error):
 
 ---
 
-## 12. Files Summary
+## 13. Files Summary
 
 | File | Lines | Purpose |
 |------|-------|---------|
@@ -475,10 +546,14 @@ If the AI API call fails (rate limit, invalid key, network error):
 | `analyze_with_ai(logs, claude_key, openai_key)` | AI fallback orchestrator |
 | `analyze_with_claude(logs, api_key)` | Call Claude API for analysis |
 | `analyze_with_openai(logs, api_key)` | Call OpenAI API for analysis |
+| `log_unmatched_error(logs, source)` | Log unmatched error to feedback queue |
+| `get_unmatched_errors(status, limit)` | Retrieve errors for review |
+| `get_feedback_stats()` | Get pending/reviewed/created counts |
+| `suggest_pattern_from_log(logs, api_key)` | AI-generate pattern code |
 
 ---
 
-## 13. Quick Reference Commands
+## 14. Quick Reference Commands
 
 ```bash
 # Run CLI
@@ -505,7 +580,7 @@ rm -rf __pycache__
 
 ---
 
-## 14. Deployment Options
+## 15. Deployment Options
 
 ### Local Development
 ```bash
@@ -528,7 +603,7 @@ python3 log_analyser_web.py
 
 ---
 
-## 15. Contributing New Patterns
+## 16. Contributing New Patterns
 
 1. Identify a common error from your logs
 2. Find the unique error signature (what text always appears)

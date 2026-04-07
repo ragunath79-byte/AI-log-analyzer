@@ -130,6 +130,7 @@ python log_analyser.py
 - 563 patterns covering core infrastructure + applications
 - **100% offline operation** — no internet required
 - **Optional AI enhancement** (Claude/ChatGPT) for rare edge cases
+- **Feedback loop** — unmatched errors logged for continuous improvement
 - CLI tool for manual analysis
 - Web interface with optional API key configuration
 
@@ -179,7 +180,10 @@ python log_analyser.py
 A: Each pattern targets specific error signatures. False positive rate < 1% based on testing.
 
 **Q: What if an error isn't recognized?**
-A: Returns "no match" by default. Optionally, if AI API keys are configured, it falls back to Claude/ChatGPT for analysis. AI is completely optional.
+A: Returns "no match" by default. Optionally, if AI API keys are configured, it falls back to Claude/ChatGPT for analysis. Unmatched errors are also **logged automatically** for review — engineers can see frequent misses and add new patterns.
+
+**Q: Does it learn/improve over time?**
+A: Yes — through a human-curated feedback loop. Unmatched errors are logged with frequency counts, queued for review, and AI can suggest pattern code. This ensures quality while continuously expanding coverage.
 
 **Q: Does it require internet/external services?**
 A: No. The tool is 100% offline-capable. AI fallback is optional — without API keys, it works perfectly with 563 built-in patterns.
@@ -214,6 +218,7 @@ A: Complementary. They show logs; we tell you what to do.
 ✅ **Lightweight & Offline** — no internet, no dependencies  
 ✅ **563 patterns** covering our entire stack  
 ✅ **Instant diagnosis** with root cause + fix steps  
+✅ **Feedback loop** — continuously improves from real incidents  
 ✅ **$34K+ annual savings** in engineering time  
 ✅ **Extensible** — grows with our infrastructure  
 ✅ **Optional AI** — Claude/ChatGPT for edge cases (not required)  
