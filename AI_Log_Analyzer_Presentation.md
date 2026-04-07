@@ -44,7 +44,7 @@ CrashLoopBackOff: container restarted 5 times, exit code 137
 
 ## Slide 4: Coverage
 
-### 500 Patterns Across Our Stack
+### 563 Patterns Across Our Stack
 
 | Category | Patterns | Category | Patterns |
 |----------|----------|----------|----------|
@@ -53,9 +53,11 @@ CrashLoopBackOff: container restarted 5 times, exit code 137
 | Vault | 16 | Terraform | 20 |
 | PostgreSQL | 7 | MongoDB | 7 |
 | Docker | 8 | Nginx | 7 |
-| Elasticsearch | 4 | Redis | 4 |
+| **Elasticsearch** | **24** | Redis | 4 |
 | Gardener | 24 | Fluent Bit | 13 |
 | GitHub Actions | 6 | Linux System | 9 |
+| **Java/Spring** | **17** | **Python** | **8** |
+| **HTTP/API** | **10** | **Microservices** | **8** |
 
 ---
 
@@ -65,7 +67,7 @@ CrashLoopBackOff: container restarted 5 times, exit code 137
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │  Log Sources    │────▶│  Pattern Engine  │────▶│  Remediation    │
 │                 │     │                  │     │                 │
-│ • kubectl logs  │     │ • 500 regex      │     │ • Root cause    │
+│ • kubectl logs  │     │ • 563 regex      │     │ • Root cause    │
 │ • Fluent Bit    │     │ • Severity tags  │     │ • Impact        │
 │ • CloudWatch    │     │ • O(n) matching  │     │ • Fix steps     │
 │ • Splunk export │     │                  │     │ • Commands      │
@@ -120,7 +122,7 @@ python log_analyser.py
 ## Slide 8: Roadmap
 
 ### Phase 1 (Complete) ✅
-- 500 patterns covering core infrastructure
+- 563 patterns covering core infrastructure + applications
 - CLI tool for manual analysis
 - Web interface for team access
 
@@ -156,7 +158,7 @@ python log_analyser.py
 ```
 
 ### Performance
-- 500 patterns: < 10ms matching time
+- 563 patterns: < 10ms matching time
 - Scales to 10,000+ patterns without degradation
 - No external dependencies
 
@@ -199,7 +201,7 @@ A: Complementary. They show logs; we tell you what to do.
 
 ### AI Log Analyzer
 
-✅ **500 patterns** covering our entire stack  
+✅ **563 patterns** covering our entire stack  
 ✅ **Instant diagnosis** with root cause + fix steps  
 ✅ **$34K+ annual savings** in engineering time  
 ✅ **Extensible** — grows with our infrastructure  
@@ -216,7 +218,7 @@ A: Complementary. They show logs; we tell you what to do.
 Engineers spend 30-60 minutes per incident researching error messages. This knowledge is scattered across documentation, Stack Overflow, and tribal knowledge.
 
 ### Solution
-An AI-powered pattern-matching engine with 500+ error patterns covering Kubernetes, AWS, Kafka, databases, and infrastructure tools. Each pattern provides:
+An AI-powered pattern-matching engine with 563 error patterns covering Kubernetes, AWS, Kafka, Elasticsearch, databases, Java/Python applications, and infrastructure tools. Each pattern provides:
 - Instant error identification
 - Root cause analysis
 - Step-by-step remediation commands
