@@ -13,15 +13,26 @@
 │           │         paste logs                   │ HTTP POST        │
 │           ▼                                      ▼                  │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    PATTERN ENGINE                            │   │
+│  │                    PATTERN ENGINE (Offline)                  │   │
 │  │                                                              │   │
-│  │   PATTERNS = [                                               │   │
-│  │     { regex, summary, cause, impact, fix, severity },        │   │
-│  │     { regex, summary, cause, impact, fix, severity },        │   │
-│  │     ... 563 patterns                                         │   │
-│  │   ]                                                          │   │
-│  │                                                              │   │
+│  │   PATTERNS = [ 563 regex patterns ]                          │   │
 │  │   analyze_offline(logs) → matches                            │   │
+│  │                                                              │   │
+│  │   ┌─────────────────┐    ┌──────────────────────────────┐    │   │
+│  │   │  Match Found?   │───▶│  Return pattern + fix steps  │    │   │
+│  │   └────────┬────────┘    └──────────────────────────────┘    │   │
+│  │            │ No                                              │   │
+│  │            ▼                                                 │   │
+│  │   ┌─────────────────────────────────────────────────────┐    │   │
+│  │   │            AI FALLBACK (Optional)                   │    │   │
+│  │   │                                                     │    │   │
+│  │   │   ┌─────────┐      ┌─────────┐                      │    │   │
+│  │   │   │ Claude  │  OR  │ ChatGPT │                      │    │   │
+│  │   │   │ (API)   │      │ (API)   │                      │    │   │
+│  │   │   └─────────┘      └─────────┘                      │    │   │
+│  │   │                                                     │    │   │
+│  │   │   analyze_with_ai(logs) → AI-generated analysis     │    │   │
+│  │   └─────────────────────────────────────────────────────┘    │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                              │                                      │
 │                              ▼                                      │
@@ -41,8 +52,8 @@
 
 ```
 AI-log-analyzer/
-├── log_analyser.py              # Core engine + CLI (563 patterns)
-├── log_analyser_web.py          # Web UI server (imports from log_analyser.py)
+├── log_analyser.py              # Core engine + CLI (563 patterns + AI fallback)
+├── log_analyser_web.py          # Web UI server with AI settings panel
 ├── AI_Log_Analyzer_Presentation.md
 ├── AI_Log_Analyzer_Demo_Guide.md
 └── TECHNICAL_REFERENCE.md       # This file
@@ -273,10 +284,120 @@ re.search(r"(?i)CrashLoopBackOff", "Error: CrashLoopBackOff...")
 | **Step-by-step fixes** | Actionable, not just diagnosis |
 | **Deduplication** | Don't show same issue twice |
 | **Case-insensitive** | Match logs regardless of case |
+| **AI Fallback** | Claude/ChatGPT for unknown errors not in patterns |
+| **Browser-stored keys** | API keys in localStorage, never sent to server logs |
 
 ---
 
-## 9. Adding a New Pattern
+## 9. AI Fallback Architecture
+
+When the offline pattern engine cannot find a match, the system falls back to AI-powered analysis using Claude (Anthropic) or OpenAI (ChatGPT).
+
+### Why AI Fallback?
+
+- **563 patterns cannot cover every possible error** — new errors, edge cases, and rare issues will occur
+- **AI provides intelligent analysis** — even for never-seen-before errors
+- **Hybrid approach** — fast offline matching + AI backup ensures best coverage
+
+### Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    LOG INPUT                                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              PATTERN ENGINE (analyze_offline)                   │
+│              563 regex patterns, instant match                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+        Match Found?                     No Match
+              │                               │
+              ▼                               ▼
+┌─────────────────────────┐     ┌─────────────────────────────────┐
+│  Return pattern data    │     │  AI FALLBACK (analyze_with_ai)  │
+│  (instant, offline)     │     │                                 │
+└─────────────────────────┘     │  ┌─────────┐    ┌─────────┐     │
+                                │  │ Claude  │ OR │ ChatGPT │     │
+                                │  └─────────┘    └─────────┘     │
+                                │                                 │
+                                │  Send log → Get analysis        │
+                                └─────────────────────────────────┘
+                                              │
+                                              ▼
+                                ┌─────────────────────────────────┐
+                                │  AI-generated analysis:         │
+                                │  • Summary • Cause • Impact     │
+                                │  • Fix steps (AI-generated)     │
+                                └─────────────────────────────────┘
+```
+
+### AI Functions
+
+```python
+# Primary fallback function (tries Claude first, then OpenAI)
+def analyze_with_ai(logs, claude_key=None, openai_key=None):
+    if claude_key:
+        return analyze_with_claude(logs, api_key=claude_key)
+    elif openai_key:
+        return analyze_with_openai(logs, api_key=openai_key)
+    return None
+
+# Claude API call
+def analyze_with_claude(logs, api_key=None):
+    # POST to https://api.anthropic.com/v1/messages
+    # Model: claude-sonnet-4-20250514
+    # Returns: { summary, cause, impact, fix, severity }
+
+# OpenAI API call  
+def analyze_with_openai(logs, api_key=None):
+    # POST to https://api.openai.com/v1/chat/completions
+    # Model: gpt-4o-mini
+    # Returns: { summary, cause, impact, fix, severity }
+```
+
+### API Key Configuration
+
+API keys are stored in browser `localStorage` — never hardcoded or logged:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SETTINGS PANEL (Web UI)                      │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Anthropic API Key (Claude):    [sk-ant-••••••••]       │    │
+│  │  OpenAI API Key (ChatGPT):      [sk-••••••••]           │    │
+│  │                                                         │    │
+│  │  [ Save Settings ]                                      │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│  Keys stored in browser localStorage                            │
+│  Sent with each /analyze request (HTTPS recommended)            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### When AI Fallback is Used
+
+| Scenario | Pattern Engine | AI Fallback |
+|----------|----------------|-------------|
+| Known error (e.g., CrashLoopBackOff) | ✅ Returns match | Not needed |
+| Unknown/rare error | ❌ No match | ✅ Analyzes with AI |
+| New technology error | ❌ No pattern exists | ✅ AI provides insight |
+| No API keys configured | ❌ No match | ⚠️ Shows "No matches found" |
+
+### Error Handling
+
+If the AI API call fails (rate limit, invalid key, network error):
+- Error is captured and returned in `ai_error` field
+- UI displays: "AI analysis failed: [error message]"
+- User can check and update API keys in Settings
+
+---
+
+## 10. Adding a New Pattern
 
 ```python
 # In log_analyser.py, add to PATTERNS list:
@@ -301,7 +422,7 @@ re.search(r"(?i)CrashLoopBackOff", "Error: CrashLoopBackOff...")
 
 ---
 
-## 10. Pattern Categories (563 Total)
+## 11. Pattern Categories (563 Total)
 
 | Category | Count | Examples |
 |----------|-------|----------|
@@ -328,16 +449,25 @@ re.search(r"(?i)CrashLoopBackOff", "Error: CrashLoopBackOff...")
 
 ---
 
-## 11. Files Summary
+## 12. Files Summary
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `log_analyser.py` | ~13,000 | 563 patterns + `analyze_offline()` function |
-| `log_analyser_web.py` | ~800 | HTTP server + HTML/CSS/JS frontend |
+| `log_analyser.py` | ~14,000 | 563 patterns + `analyze_offline()` + AI fallback functions |
+| `log_analyser_web.py` | ~1,000 | HTTP server + HTML/CSS/JS frontend + Settings panel |
+
+### Key Functions in `log_analyser.py`
+
+| Function | Purpose |
+|----------|---------|
+| `analyze_offline(logs)` | Match logs against 563 regex patterns |
+| `analyze_with_ai(logs, claude_key, openai_key)` | AI fallback orchestrator |
+| `analyze_with_claude(logs, api_key)` | Call Claude API for analysis |
+| `analyze_with_openai(logs, api_key)` | Call OpenAI API for analysis |
 
 ---
 
-## 12. Quick Reference Commands
+## 13. Quick Reference Commands
 
 ```bash
 # Run CLI
@@ -364,7 +494,7 @@ rm -rf __pycache__
 
 ---
 
-## 13. Deployment Options
+## 14. Deployment Options
 
 ### Local Development
 ```bash
@@ -387,7 +517,7 @@ python3 log_analyser_web.py
 
 ---
 
-## 14. Contributing New Patterns
+## 15. Contributing New Patterns
 
 1. Identify a common error from your logs
 2. Find the unique error signature (what text always appears)
@@ -400,3 +530,19 @@ python3 log_analyser_web.py
 
 ## Author
 Ragunath | April 2026
+
+---
+
+## Note on AI Dependency
+
+This tool uses a **hybrid approach**:
+
+1. **Primary (Offline)**: 563 regex patterns handle ~95% of common errors instantly
+2. **Fallback (AI)**: Claude/ChatGPT analyzes unknown errors when no patterns match
+
+**When is AI needed?**
+- For errors not covered by the 563 built-in patterns
+- For rare edge cases or new technologies
+- For complex multi-line errors that are hard to pattern-match
+
+**Without AI API keys**: The tool still works fully offline with pattern matching — AI fallback simply won't be available for unmatched errors.

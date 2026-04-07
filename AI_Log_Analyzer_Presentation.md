@@ -28,7 +28,7 @@ Ragunath | April 2026
 ## Slide 3: The Solution
 
 ### AI Log Analyzer
-A pattern-matching engine that provides **instant diagnosis + step-by-step fixes**
+A **hybrid** pattern-matching engine with AI fallback that provides **instant diagnosis + step-by-step fixes**
 
 **Input:** Error log
 ```
@@ -76,6 +76,7 @@ CrashLoopBackOff: container restarted 5 times, exit code 137
 
 ### Key Design Decisions
 - **Regex-based:** Fast, deterministic, debuggable
+- **AI fallback:** Claude/ChatGPT for unknown errors
 - **Categorized:** Organized by technology domain
 - **Actionable:** Every pattern includes fix commands
 - **Extensible:** Add new patterns in 5 minutes
@@ -123,8 +124,9 @@ python log_analyser.py
 
 ### Phase 1 (Complete) ✅
 - 563 patterns covering core infrastructure + applications
+- **AI fallback (Claude/ChatGPT)** for unknown errors
 - CLI tool for manual analysis
-- Web interface for team access
+- Web interface with in-browser API key configuration
 
 ### Phase 2 (Q2 2026)
 - Integration with Slack/Teams for real-time alerts
