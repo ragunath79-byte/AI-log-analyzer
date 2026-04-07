@@ -14093,6 +14093,166 @@ PATTERNS = [
         "severity": "Medium",
     },
 ]
+
+# ─── Pattern Categories (extracted from source comments) ─────────────────────
+PATTERN_CATEGORIES = [
+    ("Kubernetes / Container", r"^    # ── Kubernetes / Container"),
+    ("Networking", r"^    # ── Networking(?! Additional)"),
+    ("OpenSearch / Elasticsearch", r"^    # ── OpenSearch / Elasticsearch"),
+    ("Vault / Secrets", r"^    # ── Vault / Secrets"),
+    ("TLS / Certificates", r"^    # ── TLS / Certificates"),
+    ("Disk / Storage", r"^    # ── Disk / Storage"),
+    ("Python", r"^    # ── Python(?! Additional)"),
+    ("Java / JVM", r"^    # ── Java / JVM"),
+    ("Go", r"^    # ── Go ─"),
+    ("Git / CI/CD", r"^    # ── Git / CI/CD"),
+    ("Terraform", r"^    # ── Terraform(?! Additional)"),
+    ("DNS", r"^    # ── DNS ─"),
+    ("Database", r"^    # ── Database ─"),
+    ("OpenSearch Security", r"^    # ── OpenSearch Security"),
+    ("Kubernetes Additional", r"^    # ── Kubernetes Additional"),
+    ("Helm", r"^    # ── Helm ─"),
+    ("Docker", r"^    # ── Docker ─"),
+    ("AWS", r"^    # ── AWS ─"),
+    ("Nginx / Ingress", r"^    # ── Nginx / Ingress"),
+    ("Node.js", r"^    # ── Node\.js"),
+    ("Redis", r"^    # ── Redis ─"),
+    ("MongoDB", r"^    # ── MongoDB ─"),
+    ("Kafka", r"^    # ── Kafka ─"),
+    ("CI/CD", r"^    # ── CI/CD ─"),
+    ("ArgoCD / Flux", r"^    # ── ArgoCD / Flux"),
+    ("Prometheus / Alertmanager", r"^    # ── Prometheus / Alertmanager"),
+    ("cert-manager", r"^    # ── cert-manager"),
+    ("Istio / Service Mesh", r"^    # ── Istio / Service Mesh"),
+    ("Elasticsearch Additional", r"^    # ── Elasticsearch/OpenSearch Additional"),
+    ("Istio / Envoy Additional", r"^    # ── Istio / Envoy Additional"),
+    ("gRPC", r"^    # ── gRPC ─"),
+    ("Linux / OS", r"^    # ── Linux / OS"),
+    ("Networking Additional", r"^    # ── Networking Additional"),
+    ("S3 / Storage", r"^    # ── S3 / Storage"),
+    ("Ansible", r"^    # ── Ansible ─"),
+    ("Network Policy", r"^    # ── Kubernetes Network Policy"),
+    ("Python Additional", r"^    # ── Python Additional"),
+    ("MySQL", r"^    # ── MySQL Specific"),
+    ("Kustomize", r"^    # ── Kustomize ─"),
+    ("Gradle / Maven", r"^    # ── Gradle / Maven"),
+    ("Vault Additional", r"^    # ── Vault Additional"),
+    ("Fluent Bit / Fluentd", r"^    # ── Fluent Bit / Fluentd"),
+    ("CORS", r"^    # ── CORS ─"),
+    ("JWT / Auth", r"^    # ── JWT / Auth"),
+    ("RabbitMQ", r"^    # ── RabbitMQ ─"),
+    ("PostgreSQL", r"^    # ── PostgreSQL ─"),
+    ("Terraform Additional", r"^    # ── Terraform Additional"),
+    ("SSH", r"^    # ── SSH ─"),
+    ("Systemd", r"^    # ── Systemd ─"),
+    ("Container Registry", r"^    # ── Container Registry"),
+]
+
+def get_patterns_summary():
+    """Get patterns organized by category for display."""
+    # Simple categorization based on regex patterns
+    categories = {}
+    
+    for i, pat in enumerate(PATTERNS):
+        regex = pat.get("regex", "")
+        summary = pat.get("summary", "Unknown")
+        severity = pat.get("severity", "Medium")
+        
+        # Categorize by matching keywords
+        category = "Other"
+        regex_lower = regex.lower()
+        summary_lower = summary.lower()
+        
+        if any(k in regex_lower or k in summary_lower for k in ["kubernetes", "pod", "k8s", "kubectl", "deployment", "crashloop", "oomkill", "container", "imagepull"]):
+            category = "Kubernetes"
+        elif any(k in regex_lower or k in summary_lower for k in ["docker", "daemon", "dockerfile"]):
+            category = "Docker"
+        elif any(k in regex_lower or k in summary_lower for k in ["aws", "ec2", "s3", "lambda", "iam", "cloudwatch", "throttling"]):
+            category = "AWS"
+        elif any(k in regex_lower or k in summary_lower for k in ["gcp", "google", "gke", "bigquery"]):
+            category = "GCP"
+        elif any(k in regex_lower or k in summary_lower for k in ["azure", "blob", "aks"]):
+            category = "Azure"
+        elif any(k in regex_lower or k in summary_lower for k in ["terraform", "tfstate", "provider", "hcl"]):
+            category = "Terraform"
+        elif any(k in regex_lower or k in summary_lower for k in ["helm", "chart", "release"]):
+            category = "Helm"
+        elif any(k in regex_lower or k in summary_lower for k in ["vault", "seal", "unseal", "secret"]):
+            category = "Vault"
+        elif any(k in regex_lower or k in summary_lower for k in ["elasticsearch", "opensearch", "shard", "circuit"]):
+            category = "Elasticsearch/OpenSearch"
+        elif any(k in regex_lower or k in summary_lower for k in ["kafka", "consumer", "producer", "broker", "topic", "offset"]):
+            category = "Kafka"
+        elif any(k in regex_lower or k in summary_lower for k in ["redis", "cache"]):
+            category = "Redis"
+        elif any(k in regex_lower or k in summary_lower for k in ["mongo", "bson", "cursor"]):
+            category = "MongoDB"
+        elif any(k in regex_lower or k in summary_lower for k in ["postgres", "psql", "pg_"]):
+            category = "PostgreSQL"
+        elif any(k in regex_lower or k in summary_lower for k in ["mysql", "mariadb"]):
+            category = "MySQL"
+        elif any(k in regex_lower or k in summary_lower for k in ["certificate", "ssl", "tls", "x509", "cert"]):
+            category = "TLS/SSL"
+        elif any(k in regex_lower or k in summary_lower for k in ["dns", "resolve", "nxdomain"]):
+            category = "DNS"
+        elif any(k in regex_lower or k in summary_lower for k in ["nginx", "ingress", "proxy"]):
+            category = "Nginx/Ingress"
+        elif any(k in regex_lower or k in summary_lower for k in ["jenkins", "pipeline", "cicd", "ci/cd", "github action", "argocd", "flux"]):
+            category = "CI/CD"
+        elif any(k in regex_lower or k in summary_lower for k in ["python", "traceback", "importerror", "modulenotfound"]):
+            category = "Python"
+        elif any(k in regex_lower or k in summary_lower for k in ["java", "jvm", "nullpointer", "classnotfound", "outofmemory"]):
+            category = "Java/JVM"
+        elif any(k in regex_lower or k in summary_lower for k in ["node", "npm", "yarn", "enoent", "eaddrinuse"]):
+            category = "Node.js"
+        elif any(k in regex_lower or k in summary_lower for k in ["golang", "go ", "panic:", "goroutine"]):
+            category = "Go"
+        elif any(k in regex_lower or k in summary_lower for k in ["network", "connection", "timeout", "socket", "tcp", "http"]):
+            category = "Networking"
+        elif any(k in regex_lower or k in summary_lower for k in ["disk", "storage", "filesystem", "mount", "volume"]):
+            category = "Storage"
+        elif any(k in regex_lower or k in summary_lower for k in ["prometheus", "alertmanager", "metric"]):
+            category = "Prometheus"
+        elif any(k in regex_lower or k in summary_lower for k in ["istio", "envoy", "sidecar", "grpc"]):
+            category = "Service Mesh"
+        elif any(k in regex_lower or k in summary_lower for k in ["ansible", "playbook"]):
+            category = "Ansible"
+        elif any(k in regex_lower or k in summary_lower for k in ["git", "ssh", "permission"]):
+            category = "Git/SSH"
+        elif any(k in regex_lower or k in summary_lower for k in ["rabbitmq", "amqp", "queue"]):
+            category = "RabbitMQ"
+        elif any(k in regex_lower or k in summary_lower for k in ["auth", "jwt", "token", "oauth", "cors"]):
+            category = "Auth/Security"
+        elif any(k in regex_lower or k in summary_lower for k in ["linux", "systemd", "kernel", "oom"]):
+            category = "Linux/OS"
+        
+        if category not in categories:
+            categories[category] = []
+        
+        categories[category].append({
+            "id": i,
+            "regex": regex[:100] + ("..." if len(regex) > 100 else ""),
+            "summary": summary,
+            "severity": severity
+        })
+    
+    # Sort categories by count (descending), but keep "Other" at the end
+    sorted_cats = sorted(
+        [(k, v) for k, v in categories.items() if k != "Other"],
+        key=lambda x: len(x[1]),
+        reverse=True
+    )
+    if "Other" in categories:
+        sorted_cats.append(("Other", categories["Other"]))
+    
+    return {
+        "total": len(PATTERNS),
+        "categories": [
+            {"name": name, "count": len(patterns), "patterns": patterns}
+            for name, patterns in sorted_cats
+        ]
+    }
+
 def analyze_offline(logs):
     """Match logs against known patterns and return structured results."""
     matches = []

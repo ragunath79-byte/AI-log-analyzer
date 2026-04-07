@@ -24,7 +24,7 @@ try:
         PATTERNS, analyze_offline, analyze_with_ai,
         log_unmatched_error, get_unmatched_errors, update_unmatched_error,
         clear_unmatched_errors, get_feedback_stats, suggest_pattern_from_log,
-        create_github_issue, get_github_issues
+        create_github_issue, get_github_issues, get_patterns_summary
     )
 except ImportError:
     print("❌ Error: log_analyser.py must be in the same directory.")
@@ -40,29 +40,34 @@ HTML_PAGE = """<!DOCTYPE html>
 <title>AI Log Analyzer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg-primary: #0f0f1a;
-    --bg-secondary: #1a1a2e;
-    --bg-card: #16213e;
-    --bg-card-hover: #1c2a4a;
-    --border: rgba(99, 102, 241, 0.2);
-    --border-glow: rgba(99, 102, 241, 0.4);
-    --text-primary: #f1f5f9;
+    --bg-primary: #030712;
+    --bg-secondary: #0a0f1a;
+    --bg-card: rgba(15, 23, 42, 0.6);
+    --bg-card-solid: #0f172a;
+    --bg-card-hover: rgba(30, 41, 59, 0.7);
+    --border: rgba(148, 163, 184, 0.1);
+    --border-glow: rgba(99, 102, 241, 0.5);
+    --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
-    --text-dim: #64748b;
+    --text-dim: #475569;
     --accent: #6366f1;
     --accent-light: #818cf8;
-    --accent-glow: rgba(99, 102, 241, 0.3);
+    --accent-glow: rgba(99, 102, 241, 0.4);
     --green: #10b981;
-    --green-glow: rgba(16, 185, 129, 0.2);
-    --yellow: #f59e0b;
-    --yellow-glow: rgba(245, 158, 11, 0.2);
-    --red: #ef4444;
-    --red-glow: rgba(239, 68, 68, 0.2);
+    --green-light: #34d399;
+    --green-glow: rgba(16, 185, 129, 0.25);
+    --yellow: #fbbf24;
+    --yellow-glow: rgba(251, 191, 36, 0.25);
+    --red: #f43f5e;
+    --red-glow: rgba(244, 63, 94, 0.25);
+    --cyan: #22d3ee;
+    --purple: #a855f7;
     --gradient-1: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-    --gradient-2: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+    --gradient-2: linear-gradient(135deg, #22d3ee 0%, #6366f1 50%, #a855f7 100%);
+    --gradient-3: linear-gradient(180deg, rgba(99, 102, 241, 0.15) 0%, transparent 50%);
   }
   
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -70,107 +75,185 @@ HTML_PAGE = """<!DOCTYPE html>
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg-primary);
-    background-image: 
-      radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
     color: var(--text-primary);
     min-height: 100vh;
     padding: 2rem;
     line-height: 1.6;
+    overflow-x: hidden;
+  }
+  
+  /* Animated background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.3), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(168, 85, 247, 0.15), transparent),
+      radial-gradient(ellipse 40% 30% at 0% 100%, rgba(34, 211, 238, 0.1), transparent);
+    pointer-events: none;
+    z-index: -1;
+    animation: bgPulse 8s ease-in-out infinite alternate;
+  }
+  
+  @keyframes bgPulse {
+    0% { opacity: 0.8; }
+    100% { opacity: 1; }
+  }
+  
+  /* Noise texture overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: -1;
   }
   
   .container { 
-    max-width: 960px; 
+    max-width: 1000px; 
     margin: 0 auto;
+    position: relative;
   }
   
   /* Header Section */
   .header {
     text-align: center;
     margin-bottom: 3rem;
-    padding: 2rem 0;
+    padding: 2.5rem 0;
+    position: relative;
   }
   
   .logo {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
   }
   
   .logo-icon {
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     background: var(--gradient-1);
-    border-radius: 16px;
+    border-radius: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.8rem;
-    box-shadow: 0 8px 32px var(--accent-glow);
+    font-size: 2rem;
+    box-shadow: 
+      0 0 40px var(--accent-glow),
+      0 20px 40px -10px rgba(99, 102, 241, 0.5);
+    animation: float 3s ease-in-out infinite;
+    position: relative;
+  }
+  
+  .logo-icon::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: var(--gradient-1);
+    border-radius: 22px;
+    z-index: -1;
+    opacity: 0.5;
+    filter: blur(15px);
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
   }
   
   h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    background: var(--gradient-1);
+    font-size: 3rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fff 0%, #818cf8 50%, #c084fc 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
+    text-shadow: 0 0 80px rgba(99, 102, 241, 0.5);
   }
   
   .subtitle { 
     color: var(--text-secondary); 
     font-size: 1.1rem;
     font-weight: 400;
-    max-width: 500px;
+    max-width: 550px;
     margin: 0 auto;
+    line-height: 1.7;
   }
   
-  /* Main Card */
+  .subtitle strong {
+    color: var(--accent-light);
+    font-weight: 600;
+  }
+  
+  /* Glassmorphism Card */
   .main-card {
     background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
-    border-radius: 20px;
+    border-radius: 24px;
     padding: 2rem;
     box-shadow: 
-      0 4px 6px -1px rgba(0, 0, 0, 0.3),
-      0 2px 4px -2px rgba(0, 0, 0, 0.2),
+      0 25px 50px -12px rgba(0, 0, 0, 0.5),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .main-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
   }
   
   .input-label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.8rem;
+    font-weight: 600;
     color: var(--text-secondary);
     margin-bottom: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
   }
   
   textarea {
     width: 100%;
     height: 200px;
-    background: var(--bg-primary);
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 16px;
     color: var(--text-primary);
     font-family: 'JetBrains Mono', 'SF Mono', monospace;
     font-size: 0.875rem;
     padding: 1.25rem;
     resize: vertical;
     outline: none;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   textarea:focus { 
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
+    box-shadow: 
+      0 0 0 4px var(--accent-glow),
+      inset 0 0 20px rgba(99, 102, 241, 0.1);
+    background: rgba(0, 0, 0, 0.4);
   }
   textarea::placeholder { color: var(--text-dim); }
   
@@ -186,25 +269,46 @@ HTML_PAGE = """<!DOCTYPE html>
     font-size: 0.95rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: none;
   }
   
   .btn-primary {
     background: var(--gradient-1);
     color: #fff;
-    border-radius: 12px;
-    padding: 0.875rem 2rem;
+    border-radius: 14px;
+    padding: 1rem 2rem;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    box-shadow: 0 4px 15px var(--accent-glow);
+    box-shadow: 
+      0 4px 15px var(--accent-glow),
+      0 0 0 0 rgba(99, 102, 241, 0);
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+  }
+  .btn-primary:hover::before {
+    left: 100%;
   }
   .btn-primary:hover { 
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px var(--accent-glow);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 
+      0 20px 40px -10px var(--accent-glow),
+      0 0 20px var(--accent-glow);
   }
-  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:active { 
+    transform: translateY(-1px) scale(1);
+  }
   .btn-primary:disabled { 
     opacity: 0.6; 
     cursor: wait;
@@ -212,16 +316,18 @@ HTML_PAGE = """<!DOCTYPE html>
   }
   
   .btn-secondary {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border);
     color: var(--text-secondary);
-    border-radius: 12px;
-    padding: 0.875rem 1.5rem;
+    border-radius: 14px;
+    padding: 1rem 1.5rem;
+    backdrop-filter: blur(10px);
   }
   .btn-secondary:hover { 
-    border-color: var(--text-dim);
+    border-color: var(--accent);
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(99, 102, 241, 0.1);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
   }
   
   .spinner { 
@@ -249,39 +355,53 @@ HTML_PAGE = """<!DOCTYPE html>
   #results { margin-top: 2rem; }
   
   .no-match {
-    background: var(--bg-secondary);
-    border: 1px solid var(--yellow-glow);
-    border-radius: 12px;
-    padding: 2rem;
+    background: rgba(251, 191, 36, 0.05);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 16px;
+    padding: 2.5rem;
     text-align: center;
     color: var(--yellow);
     font-weight: 500;
+    backdrop-filter: blur(10px);
   }
   
   .summary-bar {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-    border: 1px solid var(--green-glow);
-    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(34, 211, 238, 0.05) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 16px;
     padding: 1.25rem 1.5rem;
     margin-bottom: 1.5rem;
     display: flex;
     align-items: center;
     gap: 1rem;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+  }
+  .summary-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.3), transparent);
   }
   .summary-bar .icon {
-    width: 40px;
-    height: 40px;
-    background: var(--green);
-    border-radius: 10px;
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, var(--green) 0%, var(--cyan) 100%);
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.2rem;
+    font-size: 1.4rem;
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
   }
   .summary-bar .count { 
-    color: var(--green); 
-    font-size: 1.25rem;
-    font-weight: 700;
+    color: var(--green-light); 
+    font-size: 1.5rem;
+    font-weight: 800;
   }
   .summary-bar .label {
     color: var(--text-secondary);
@@ -290,20 +410,36 @@ HTML_PAGE = """<!DOCTYPE html>
   
   .issue-card {
     background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 20px;
     padding: 1.75rem;
     margin-bottom: 1.25rem;
-    animation: slideUp 0.4s ease forwards;
+    animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     opacity: 0;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .issue-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
   }
   .issue-card:hover {
     border-color: var(--border-glow);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.4),
+      0 0 30px rgba(99, 102, 241, 0.1);
+    transform: translateY(-4px);
   }
   @keyframes slideUp { 
-    from { opacity: 0; transform: translateY(20px); } 
+    from { opacity: 0; transform: translateY(30px); } 
     to { opacity: 1; transform: translateY(0); } 
   }
   
@@ -449,31 +585,39 @@ HTML_PAGE = """<!DOCTYPE html>
   
   .patterns-count {
     color: var(--text-dim);
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     margin-top: 3rem;
     text-align: center;
-    padding: 1.5rem;
+    padding: 1.75rem;
     border-top: 1px solid var(--border);
+    background: linear-gradient(180deg, transparent, rgba(99, 102, 241, 0.03));
+    border-radius: 0 0 20px 20px;
+    transition: all 0.3s;
+  }
+  .patterns-count:hover {
+    background: linear-gradient(180deg, transparent, rgba(99, 102, 241, 0.08));
   }
   .patterns-count span {
     color: var(--accent-light);
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .copy-btn {
-    background: var(--bg-secondary);
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border);
     color: var(--text-dim);
     font-size: 0.7rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    border-radius: 8px;
     cursor: pointer;
     float: right;
     font-family: 'Inter', sans-serif;
+    transition: all 0.3s;
   }
   .copy-btn:hover { 
     color: var(--text-primary); 
     border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.1);
   }
   
   /* Keyboard shortcut hint */
@@ -483,12 +627,13 @@ HTML_PAGE = """<!DOCTYPE html>
     margin-top: 1rem;
   }
   .hint kbd {
-    background: var(--bg-secondary);
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.15rem 0.4rem;
+    border-radius: 6px;
+    padding: 0.2rem 0.5rem;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.7rem;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.2);
   }
   
   /* Step styling */
@@ -508,79 +653,114 @@ HTML_PAGE = """<!DOCTYPE html>
   
   /* Settings Panel */
   .settings-btn {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    padding: 0.4rem 0.8rem;
-    border-radius: 8px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    color: var(--accent-light);
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
     font-size: 0.8rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
   }
   .settings-btn:hover {
+    background: rgba(99, 102, 241, 0.2);
     border-color: var(--accent);
-    color: var(--text-primary);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+    transform: translateY(-2px);
   }
   .settings-panel {
     background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 1.5rem;
+    border-radius: 20px;
+    padding: 1.75rem;
     margin-bottom: 1.5rem;
-    animation: slideUp 0.3s ease;
+    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .settings-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), transparent);
   }
   .settings-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
   }
   .settings-header h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.1rem;
+    font-weight: 700;
     color: var(--text-primary);
   }
   .settings-close {
-    background: none;
-    border: none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
     color: var(--text-dim);
-    font-size: 1.2rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 1rem;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
   }
-  .settings-close:hover { color: var(--text-primary); }
+  .settings-close:hover { 
+    color: var(--text-primary); 
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent);
+  }
   .settings-field {
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
   }
   .settings-field label {
     display: block;
     font-size: 0.8rem;
+    font-weight: 500;
     color: var(--text-secondary);
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.5rem;
   }
   .settings-field input {
     width: 100%;
-    background: var(--bg-primary);
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.6rem 0.8rem;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
     color: var(--text-primary);
     font-size: 0.85rem;
     font-family: 'JetBrains Mono', monospace;
+    transition: all 0.3s;
   }
   .settings-field input:focus {
     outline: none;
     border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+    background: rgba(0, 0, 0, 0.4);
   }
   .no-match-card {
     background: var(--bg-card);
-    border: 1px solid var(--yellow-glow);
-    border-radius: 16px;
-    padding: 2rem;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 20px;
+    padding: 2.5rem;
     text-align: center;
   }
   .no-match-card h3 {
     color: var(--yellow);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.25rem;
   }
   .no-match-card p {
     color: var(--text-secondary);
@@ -592,75 +772,126 @@ HTML_PAGE = """<!DOCTYPE html>
   
   /* Feedback Queue Panel */
   .feedback-btn {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    padding: 0.4rem 0.8rem;
-    border-radius: 8px;
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.2);
+    color: var(--purple);
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
     font-size: 0.8rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     margin-left: 0.5rem;
+    backdrop-filter: blur(10px);
   }
   .feedback-btn:hover {
-    border-color: var(--accent);
-    color: var(--text-primary);
+    background: rgba(168, 85, 247, 0.2);
+    border-color: var(--purple);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+    transform: translateY(-2px);
   }
   .feedback-badge {
-    background: var(--red);
+    background: linear-gradient(135deg, var(--red) 0%, #f97316 100%);
     color: white;
     font-size: 0.65rem;
-    padding: 0.15rem 0.4rem;
+    padding: 0.2rem 0.5rem;
     border-radius: 10px;
     margin-left: 0.3rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(244, 63, 94, 0.4);
   }
   .feedback-panel {
     background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 1.5rem;
+    border-radius: 20px;
+    padding: 1.75rem;
     margin-bottom: 1.5rem;
-    animation: slideUp 0.3s ease;
+    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .feedback-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.3), transparent);
   }
   .feedback-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
   }
   .feedback-stats {
     display: flex;
     gap: 1rem;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: var(--bg-primary);
-    border-radius: 12px;
+    margin-bottom: 1.25rem;
+    padding: 1.25rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 16px;
+    border: 1px solid var(--border);
   }
   .stat-item {
     text-align: center;
     flex: 1;
+    padding: 0.5rem;
+    position: relative;
+  }
+  .stat-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 20%;
+    height: 60%;
+    width: 1px;
+    background: var(--border);
   }
   .stat-value {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--accent-light);
+    font-size: 2rem;
+    font-weight: 800;
+    background: var(--gradient-2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
   .stat-label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-dim);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    margin-top: 0.25rem;
   }
   .feedback-list {
     max-height: 400px;
     overflow-y: auto;
   }
+  .feedback-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .feedback-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .feedback-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
   .feedback-item {
-    background: var(--bg-primary);
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1rem;
+    border-radius: 14px;
+    padding: 1.25rem;
     margin-bottom: 0.75rem;
+    transition: all 0.3s;
+  }
+  .feedback-item:hover {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.05);
   }
   .feedback-item-header {
     display: flex;
@@ -738,6 +969,174 @@ HTML_PAGE = """<!DOCTYPE html>
     max-height: 200px;
     overflow-y: auto;
   }
+  
+  /* Patterns Explorer Panel */
+  .patterns-btn {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: var(--green);
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-left: 0.5rem;
+    backdrop-filter: blur(10px);
+  }
+  .patterns-btn:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--green);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    transform: translateY(-2px);
+  }
+  .patterns-panel {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 1.75rem;
+    margin-bottom: 1.5rem;
+    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .patterns-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.3), transparent);
+  }
+  .patterns-search {
+    width: 100%;
+    padding: 1rem 1.25rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+    transition: all 0.3s;
+  }
+  .patterns-search:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .patterns-search::placeholder {
+    color: var(--text-dim);
+  }
+  .patterns-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .category-chip {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.4rem 0.9rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+  }
+  .category-chip:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: rgba(99, 102, 241, 0.1);
+    transform: translateY(-2px);
+  }
+  .category-chip.active {
+    background: var(--gradient-1);
+    border-color: transparent;
+    color: white;
+    box-shadow: 0 4px 15px var(--accent-glow);
+  }
+  .category-chip .count {
+    background: rgba(255,255,255,0.2);
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.65rem;
+    margin-left: 0.4rem;
+    font-weight: 600;
+  }
+  .patterns-list {
+    max-height: 500px;
+    overflow-y: auto;
+  }
+  .patterns-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .patterns-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .patterns-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .pattern-item {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.6rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .pattern-item:hover {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.1);
+    transform: translateX(4px);
+  }
+  .pattern-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+  }
+  .pattern-summary {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+  }
+  .pattern-severity {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .pattern-severity.high {
+    background: rgba(244, 63, 94, 0.2);
+    color: var(--red);
+    border: 1px solid rgba(244, 63, 94, 0.3);
+  }
+  .pattern-severity.medium {
+    background: rgba(251, 191, 36, 0.2);
+    color: var(--yellow);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+  .pattern-severity.low {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--green);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .pattern-regex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    word-break: break-all;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
@@ -747,7 +1146,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="logo-icon">🔍</div>
       <h1>AI Log Analyzer</h1>
     </div>
-    <p class="subtitle">563 built-in patterns + optional AI fallback for unknown errors</p>
+    <p class="subtitle"><strong>563</strong> built-in patterns + optional AI fallback for unknown errors</p>
   </header>
   
   <!-- Settings Panel -->
@@ -820,12 +1219,31 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
   
+  <!-- Patterns Explorer Panel -->
+  <div id="patternsPanel" class="patterns-panel" style="display: none;">
+    <div class="feedback-header">
+      <h3>📚 Pattern Explorer — PATTERN_COUNT Patterns</h3>
+      <button class="settings-close" onclick="togglePatterns()">✕</button>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+      Browse all error patterns. Click a category to filter, or search by keyword.
+    </p>
+    <input type="text" class="patterns-search" id="patternsSearch" placeholder="🔍 Search patterns by keyword, regex, or error type..." oninput="filterPatterns()">
+    <div class="patterns-categories" id="patternsCategories">
+      <p style="color: var(--text-dim);">Loading categories...</p>
+    </div>
+    <div class="patterns-list" id="patternsList">
+      <p style="text-align: center; color: var(--text-dim);">Loading patterns...</p>
+    </div>
+  </div>
+  
   <div class="main-card">
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <label class="input-label">
         <span>📋</span> Paste Your Logs
       </label>
       <div>
+        <button class="patterns-btn" onclick="togglePatterns()">📚 Patterns</button>
         <button class="settings-btn" onclick="toggleSettings()">⚙️ AI Settings</button>
         <button class="feedback-btn" onclick="toggleFeedback()">📊 Feedback<span class="feedback-badge" id="feedbackBadge" style="display:none;">0</span></button>
       </div>
@@ -844,8 +1262,8 @@ HTML_PAGE = """<!DOCTYPE html>
   
   <div id="results"></div>
   
-  <div class="patterns-count">
-    Powered by <span>PATTERN_COUNT</span> intelligent error patterns covering Kubernetes, Elasticsearch, AWS, Kafka, Vault, Terraform, PostgreSQL, MongoDB, Docker, Nginx, Java/Spring, Python, Prometheus, Gardener, and more.
+  <div class="patterns-count" onclick="togglePatterns()" style="cursor: pointer;">
+    Powered by <span>PATTERN_COUNT</span> intelligent error patterns covering Kubernetes, Elasticsearch, AWS, Kafka, Vault, Terraform, PostgreSQL, MongoDB, Docker, Nginx, Java/Spring, Python, Prometheus, Gardener, and more. <span style="color: var(--accent-light);">Click to explore →</span>
   </div>
 </div>
 
@@ -861,8 +1279,122 @@ document.addEventListener('DOMContentLoaded', function() {
 function toggleSettings() {
   const panel = document.getElementById('settingsPanel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  // Close feedback panel if open
+  // Close other panels if open
   document.getElementById('feedbackPanel').style.display = 'none';
+  document.getElementById('patternsPanel').style.display = 'none';
+}
+
+// ─── Patterns Explorer Functions ────────────────────────────────────────────
+let allPatterns = null;
+let currentCategory = null;
+
+function togglePatterns() {
+  const panel = document.getElementById('patternsPanel');
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'block' : 'none';
+  // Close other panels if open
+  document.getElementById('settingsPanel').style.display = 'none';
+  document.getElementById('feedbackPanel').style.display = 'none';
+  
+  if (isHidden && !allPatterns) {
+    loadPatterns();
+  }
+}
+
+async function loadPatterns() {
+  try {
+    const resp = await fetch('/patterns');
+    allPatterns = await resp.json();
+    
+    renderCategories();
+    renderPatterns();
+  } catch (e) {
+    console.error('Failed to load patterns:', e);
+    document.getElementById('patternsList').innerHTML = '<p style="color: var(--red);">Failed to load patterns</p>';
+  }
+}
+
+function renderCategories() {
+  const container = document.getElementById('patternsCategories');
+  if (!allPatterns || !allPatterns.categories) return;
+  
+  let html = `<div class="category-chip ${!currentCategory ? 'active' : ''}" onclick="selectCategory(null)">All <span class="count">${allPatterns.total}</span></div>`;
+  
+  allPatterns.categories.forEach(cat => {
+    const isActive = currentCategory === cat.name ? 'active' : '';
+    html += `<div class="category-chip ${isActive}" onclick="selectCategory('${cat.name}')">${cat.name} <span class="count">${cat.count}</span></div>`;
+  });
+  
+  container.innerHTML = html;
+}
+
+function selectCategory(category) {
+  currentCategory = category;
+  renderCategories();
+  renderPatterns();
+}
+
+function filterPatterns() {
+  renderPatterns();
+}
+
+function renderPatterns() {
+  const container = document.getElementById('patternsList');
+  const searchTerm = document.getElementById('patternsSearch').value.toLowerCase();
+  
+  if (!allPatterns || !allPatterns.categories) {
+    container.innerHTML = '<p style="color: var(--text-dim);">No patterns loaded</p>';
+    return;
+  }
+  
+  let patterns = [];
+  allPatterns.categories.forEach(cat => {
+    if (!currentCategory || currentCategory === cat.name) {
+      cat.patterns.forEach(p => {
+        patterns.push({...p, category: cat.name});
+      });
+    }
+  });
+  
+  // Filter by search term
+  if (searchTerm) {
+    patterns = patterns.filter(p => 
+      p.summary.toLowerCase().includes(searchTerm) ||
+      p.regex.toLowerCase().includes(searchTerm) ||
+      p.category.toLowerCase().includes(searchTerm)
+    );
+  }
+  
+  if (patterns.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: var(--text-dim); padding: 2rem;">No patterns match your search.</p>';
+    return;
+  }
+  
+  let html = '';
+  patterns.slice(0, 100).forEach(p => {
+    const severityClass = p.severity.toLowerCase();
+    html += `
+      <div class="pattern-item">
+        <div class="pattern-item-header">
+          <span class="pattern-summary">${escapeHtml(p.summary)}</span>
+          <span class="pattern-severity ${severityClass}">${p.severity}</span>
+        </div>
+        <div class="pattern-regex">${escapeHtml(p.regex)}</div>
+      </div>
+    `;
+  });
+  
+  if (patterns.length > 100) {
+    html += `<p style="text-align: center; color: var(--text-dim); padding: 1rem;">Showing 100 of ${patterns.length} patterns. Use search to narrow down.</p>`;
+  }
+  
+  container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ─── Feedback Queue Functions ───────────────────────────────────────────────
@@ -870,8 +1402,9 @@ function toggleFeedback() {
   const panel = document.getElementById('feedbackPanel');
   const isHidden = panel.style.display === 'none';
   panel.style.display = isHidden ? 'block' : 'none';
-  // Close settings panel if open
+  // Close other panels if open
   document.getElementById('settingsPanel').style.display = 'none';
+  document.getElementById('patternsPanel').style.display = 'none';
   
   if (isHidden) {
     loadFeedbackStats();
@@ -1294,6 +1827,15 @@ document.getElementById('logInput').addEventListener('keydown', function(e) {
 class LogAnalyzerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Serve the HTML page or API endpoints."""
+        # Patterns summary endpoint
+        if self.path == '/patterns':
+            summary = get_patterns_summary()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(summary).encode())
+            return
+        
         # Feedback queue stats
         if self.path == '/feedback/stats':
             stats = get_feedback_stats()
