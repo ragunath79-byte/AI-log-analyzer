@@ -1437,6 +1437,10 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
 
         # If no pattern matches, log for feedback loop and try AI analysis
         if not matches:
+            # Debug: Show what we received
+            print(f"  🔍 DEBUG: github_token={'***' + github_token[-4:] if github_token else 'None'}")
+            print(f"  🔍 DEBUG: auto_create_issue={auto_create_issue}")
+            
             # Log to local file and optionally create GitHub issue
             log_result = log_unmatched_error(
                 logs, 
@@ -1445,6 +1449,7 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
                 github_token=github_token
             )
             print(f"  📝 Unmatched error logged for feedback")
+            print(f"  🔍 DEBUG: log_result={log_result}")
             
             # Include GitHub issue info in response
             if log_result and log_result.get("github_issue"):

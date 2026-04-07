@@ -60,12 +60,18 @@ def log_unmatched_error(logs, source="unknown", create_issue=False, github_token
         if create_issue:
             github_token = github_token or os.environ.get("GITHUB_TOKEN")
             if github_token:
+                print(f"  🔗 Creating GitHub issue...")
                 issue_result = create_github_issue(logs, source, github_token)
                 if issue_result.get("success"):
                     entry["github_issue"] = {
                         "number": issue_result.get("issue_number"),
                         "url": issue_result.get("issue_url")
                     }
+                    print(f"  ✅ GitHub issue created: #{issue_result.get('issue_number')}")
+                else:
+                    print(f"  ❌ GitHub issue failed: {issue_result.get('error')}")
+            else:
+                print(f"  ⚠️ No GitHub token provided")
         
         entries.append(entry)
         
@@ -14162,7 +14168,8 @@ Logs:
             }
         )
         
-        with urllib.request.urlopen(req, timeout=30) as response:
+        ssl_context = _get_ssl_context()
+        with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result["content"][0]["text"]
     except urllib.error.HTTPError as e:
@@ -14212,7 +14219,8 @@ Logs:
             }
         )
         
-        with urllib.request.urlopen(req, timeout=30) as response:
+        ssl_context = _get_ssl_context()
+        with urllib.request.urlopen(req, timeout=30, context=ssl_context) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result["choices"][0]["message"]["content"]
     except urllib.error.HTTPError as e:
