@@ -500,6 +500,90 @@ HTML_PAGE = """<!DOCTYPE html>
     content: '→';
     color: var(--accent);
   }
+  
+  /* Settings Panel */
+  .settings-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .settings-btn:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+  .settings-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    animation: slideUp 0.3s ease;
+  }
+  .settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .settings-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+  }
+  .settings-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+  .settings-close:hover { color: var(--text-primary); }
+  .settings-field {
+    margin-bottom: 1rem;
+  }
+  .settings-field label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+  }
+  .settings-field input {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .settings-field input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .no-match-card {
+    background: var(--bg-card);
+    border: 1px solid var(--yellow-glow);
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+  }
+  .no-match-card h3 {
+    color: var(--yellow);
+    margin-bottom: 0.5rem;
+  }
+  .no-match-card p {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+  }
+  .no-match-card .btn-primary {
+    display: inline-flex;
+  }
 </style>
 </head>
 <body>
@@ -509,13 +593,38 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="logo-icon">🔍</div>
       <h1>AI Log Analyzer</h1>
     </div>
-    <p class="subtitle">Instantly analyze error logs with AI-powered pattern matching. No API key required.</p>
+    <p class="subtitle">563 built-in patterns + optional AI fallback for unknown errors</p>
   </header>
   
+  <!-- Settings Panel -->
+  <div id="settingsPanel" class="settings-panel" style="display: none;">
+    <div class="settings-header">
+      <h3>⚙️ AI Settings (Optional)</h3>
+      <button class="settings-close" onclick="toggleSettings()">✕</button>
+    </div>
+    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+      Add an API key to analyze errors that don't match built-in patterns. Keys are stored locally in your browser.
+    </p>
+    <div class="settings-field">
+      <label>Claude API Key (Anthropic)</label>
+      <input type="password" id="anthropicKey" placeholder="sk-ant-api03-..." />
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" style="font-size: 0.75rem; color: var(--accent-light);">Get key →</a>
+    </div>
+    <div class="settings-field">
+      <label>OpenAI API Key</label>
+      <input type="password" id="openaiKey" placeholder="sk-..." />
+      <a href="https://platform.openai.com/api-keys" target="_blank" style="font-size: 0.75rem; color: var(--accent-light);">Get key →</a>
+    </div>
+    <button class="btn-primary" onclick="saveSettings()" style="margin-top: 1rem;">Save Settings</button>
+  </div>
+  
   <div class="main-card">
-    <label class="input-label">
-      <span>📋</span> Paste Your Logs
-    </label>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <label class="input-label">
+        <span>📋</span> Paste Your Logs
+      </label>
+      <button class="settings-btn" onclick="toggleSettings()">⚙️ AI Settings</button>
+    </div>
     <textarea id="logInput" placeholder="Paste your error log here...&#10;&#10;Examples:&#10;  • CrashLoopBackOff, OOMKilled&#10;  • CircuitBreakingException, unassigned shards&#10;  • ThrottlingException, AccessDenied&#10;  • NullPointerException, OutOfMemoryError&#10;  • kafka consumer lag, rebalance&#10;  • vault sealed, certificate expired"></textarea>
     
     <div class="btn-row">
@@ -536,6 +645,39 @@ HTML_PAGE = """<!DOCTYPE html>
 </div>
 
 <script>
+// Load saved API keys on page load
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('anthropicKey').value = localStorage.getItem('anthropic_key') || '';
+  document.getElementById('openaiKey').value = localStorage.getItem('openai_key') || '';
+});
+
+function toggleSettings() {
+  const panel = document.getElementById('settingsPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveSettings() {
+  const anthropicKey = document.getElementById('anthropicKey').value.trim();
+  const openaiKey = document.getElementById('openaiKey').value.trim();
+  
+  if (anthropicKey) localStorage.setItem('anthropic_key', anthropicKey);
+  else localStorage.removeItem('anthropic_key');
+  
+  if (openaiKey) localStorage.setItem('openai_key', openaiKey);
+  else localStorage.removeItem('openai_key');
+  
+  toggleSettings();
+  
+  // Show confirmation
+  const results = document.getElementById('results');
+  results.innerHTML = '<div class="summary-bar" style="background: var(--green-glow); border-color: var(--green);"><div class="icon" style="background: var(--green);">✓</div><div><div class="count" style="color: var(--green);">Settings Saved</div><div class="label">AI fallback is now enabled for unknown errors</div></div></div>';
+  setTimeout(() => results.innerHTML = '', 3000);
+}
+
+function hasApiKeys() {
+  return localStorage.getItem('anthropic_key') || localStorage.getItem('openai_key');
+}
+
 async function analyze() {
   const logs = document.getElementById('logInput').value.trim();
   if (!logs) return;
@@ -546,10 +688,16 @@ async function analyze() {
   spinner.classList.add('active');
   
   try {
+    const payload = { 
+      logs,
+      anthropic_key: localStorage.getItem('anthropic_key') || '',
+      openai_key: localStorage.getItem('openai_key') || ''
+    };
+    
     const resp = await fetch('/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ logs })
+      body: JSON.stringify(payload)
     });
     const data = await resp.json();
     renderResults(data);
@@ -583,7 +731,18 @@ function renderResults(data) {
   }
   
   if (!data.matches || data.matches.length === 0) {
-    el.innerHTML = '<div class="no-match">⚠️ No known error patterns matched.<br><br>💡 <strong>Tip:</strong> Set <code>ANTHROPIC_API_KEY</code> or <code>OPENAI_API_KEY</code> environment variable to enable AI-powered analysis for unknown errors.</div>';
+    const hasKeys = hasApiKeys();
+    if (hasKeys) {
+      el.innerHTML = '<div class="no-match-card"><h3>⚠️ No Match Found</h3><p>This error doesn\\'t match any of our 563 built-in patterns, and AI analysis didn\\'t return results.<br>Try pasting a more complete error log.</p></div>';
+    } else {
+      el.innerHTML = `<div class="no-match-card">
+        <h3>⚠️ No Match Found</h3>
+        <p>This error doesn't match any of our 563 built-in patterns.<br>Enable AI analysis to get insights on unknown errors!</p>
+        <button class="btn-primary" onclick="toggleSettings()">
+          <span>⚙️</span> Configure AI Settings
+        </button>
+      </div>`;
+    }
     return;
   }
   
@@ -726,8 +885,12 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(body)
             logs = data.get('logs', '')
+            anthropic_key = data.get('anthropic_key', '')
+            openai_key = data.get('openai_key', '')
         except json.JSONDecodeError:
             logs = body
+            anthropic_key = ''
+            openai_key = ''
 
         matches = analyze_offline(logs)
 
@@ -748,11 +911,32 @@ class LogAnalyzerHandler(BaseHTTPRequestHandler):
 
         # If no pattern matches, try AI analysis
         if not matches:
-            ai_result = analyze_with_ai(logs)
-            if ai_result:
-                ai_name, ai_response = ai_result
-                result["ai_analysis"] = ai_response
-                result["ai_provider"] = ai_name
+            # Temporarily set env vars for AI analysis
+            old_anthropic = os.environ.get('ANTHROPIC_API_KEY')
+            old_openai = os.environ.get('OPENAI_API_KEY')
+            
+            if anthropic_key:
+                os.environ['ANTHROPIC_API_KEY'] = anthropic_key
+            if openai_key:
+                os.environ['OPENAI_API_KEY'] = openai_key
+            
+            try:
+                ai_result = analyze_with_ai(logs)
+                if ai_result:
+                    ai_name, ai_response = ai_result
+                    result["ai_analysis"] = ai_response
+                    result["ai_provider"] = ai_name
+            finally:
+                # Restore original env vars
+                if old_anthropic:
+                    os.environ['ANTHROPIC_API_KEY'] = old_anthropic
+                elif 'ANTHROPIC_API_KEY' in os.environ and anthropic_key:
+                    del os.environ['ANTHROPIC_API_KEY']
+                    
+                if old_openai:
+                    os.environ['OPENAI_API_KEY'] = old_openai
+                elif 'OPENAI_API_KEY' in os.environ and openai_key:
+                    del os.environ['OPENAI_API_KEY']
 
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
