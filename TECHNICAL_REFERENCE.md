@@ -1,5 +1,16 @@
 # AI Log Analyzer — Technical Reference
 
+## Core Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Offline-First** | Works 100% without internet connection |
+| **Zero Dependencies** | Only requires Python 3 (standard library) |
+| **AI is Optional** | Claude/ChatGPT fallback available but not required |
+| **Lightweight** | ~14,000 lines, single file, instant startup |
+
+---
+
 ## 1. Architecture Overview
 
 ```
@@ -533,16 +544,29 @@ Ragunath | April 2026
 
 ---
 
-## Note on AI Dependency
+## Note on AI (Optional Feature)
 
-This tool uses a **hybrid approach**:
+This tool is **100% offline-capable** and **does not require AI**.
 
-1. **Primary (Offline)**: 563 regex patterns handle ~95% of common errors instantly
-2. **Fallback (AI)**: Claude/ChatGPT analyzes unknown errors when no patterns match
+### Default Mode (Offline, No API Keys)
+- 563 patterns handle ~95%+ of common errors
+- Instant analysis (< 10ms)
+- No internet connection needed
+- No API keys required
+- No external dependencies
 
-**When is AI needed?**
-- For errors not covered by the 563 built-in patterns
-- For rare edge cases or new technologies
-- For complex multi-line errors that are hard to pattern-match
+### Optional AI Enhancement (Requires API Keys)
+- For rare errors not in the 563 patterns
+- User can configure Claude or ChatGPT API keys
+- Only called when no patterns match AND keys are configured
+- Completely optional — tool works perfectly without it
 
-**Without AI API keys**: The tool still works fully offline with pattern matching — AI fallback simply won't be available for unmatched errors.
+### Summary
+
+| Scenario | Internet Required | API Keys Required | Works? |
+|----------|-------------------|-------------------|--------|
+| Common errors (95%+) | ❌ No | ❌ No | ✅ Yes |
+| Rare/unknown errors (no AI) | ❌ No | ❌ No | ⚠️ "No match" |
+| Rare/unknown errors (with AI) | ✅ Yes | ✅ Yes | ✅ Yes |
+
+**Bottom Line:** The AI feature is an enhancement, not a requirement. The tool was designed to be lightweight and offline-first.
