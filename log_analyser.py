@@ -23,6 +23,7 @@ def log_unmatched_error(logs, source="unknown", create_issue=False, github_token
         create_issue: If True, also create a GitHub issue
         github_token: GitHub token for issue creation
     """
+    print(f"  🔍 DEBUG (log_unmatched_error): create_issue={create_issue}, has_token={bool(github_token)}")
     try:
         # Load existing entries
         entries = []

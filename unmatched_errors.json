@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2026-04-07T18:16:09.357295",
+    "last_seen": "2026-04-07T18:17:17.274896",
+    "source": "web",
+    "log_snippet": "europe-docker.pkg.dev/sap-se-gcp-k8s-c-delivery/releases-canary-public/europe-docker_pkg_dev/gardener-project/releases/gardener/network-problem-detector@sha256:739e5daa716b69e366b2edc541f48edc9575f3732d14f63a301cc7a0c45a5579",
+    "fingerprint": "europe-docker.pkg.dev/sap-se-gcp-k8s-c-delivery/releases-canary-public/europe-docker_pkg_dev/gardener-project/releases/gardener/network-problem-detector@sha256:739e5daa716b69e366b2edc541f48edc9575f373",
+    "count": 2,
+    "status": "pending",
+    "notes": "",
+    "github_issue": null
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-04-07T18:22:43.161747",
+    "last_seen": "2026-04-07T18:22:43.161763",
+    "source": "web",
+    "log_snippet": "time=\"2026-04-07T06:32:07Z\" level=info msg=\"Report: ip-10-250-22-91.eu-central-1.compute.internal->ip-10-250-31-175.eu-central-1.compute.internal[tcp-n2p]: OK (2 ms) last observed: 2026-04-07T06:29:48Z\" cmd=agent sub=aggr",
+    "fingerprint": "time=\"2026-04-07T06:32:07Z\" level=info msg=\"Report: ip-10-250-22-91.eu-central-1.compute.internal->ip-10-250-31-175.eu-central-1.compute.internal[tcp-n2p]: OK (2 ms) last observed: 2026-04-07T06:29:48",
+    "count": 1,
+    "status": "pending",
+    "notes": "",
+    "github_issue": {
+      "number": 7,
+      "url": "https://github.com/ragunath79-byte/AI-log-analyzer/issues/7"
+    }
+  }
+]
