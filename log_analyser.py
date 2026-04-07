@@ -184,6 +184,15 @@ def get_feedback_stats():
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "ragunath79-byte/AI-log-analyzer")  # owner/repo
 GITHUB_API_BASE = "https://api.github.com"  # Public GitHub API
 
+def _get_ssl_context():
+    """Get SSL context that works on macOS with certificate issues."""
+    import ssl
+    # Create unverified context for systems with certificate issues
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
 def create_github_issue(logs, source="unknown", github_token=None):
     """Create a GitHub Issue for an unmatched error so team can see it."""
     try:
@@ -243,7 +252,7 @@ def create_github_issue(logs, source="unknown", github_token=None):
             }
         )
         
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req, timeout=15, context=_get_ssl_context()) as response:
             result = json.loads(response.read().decode('utf-8'))
             return {
                 "success": True,
@@ -278,7 +287,7 @@ def get_github_issues(github_token=None, state="open", labels="unmatched-error")
             }
         )
         
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req, timeout=15, context=_get_ssl_context()) as response:
             issues = json.loads(response.read().decode('utf-8'))
             return {
                 "success": True,
